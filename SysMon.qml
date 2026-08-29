@@ -72,8 +72,35 @@ BarWidget {
   property int historyVersion: 0
   readonly property int historyMax: 120
 
-  // ---- Alerts
-  property bool alertActive: false
+  // ---- Bar label (rich text: failing resources render urgent-colored inline)
+  readonly property color urgentCol: root.bar ? root.bar.urgent : Color.urgent
+
+  function colorToHex(c) {
+    var q = Qt.color(c)
+    function hx(v) {
+      var s = Math.round(v * 255).toString(16)
+      return s.length < 2 ? "0" + s : s
+    }
+    return "#" + hx(q.r) + hx(q.g) + hx(q.b)
+  }
+
+  function seg(text, alert) {
+    return alert ? "<font color=\"" + colorToHex(urgentCol) + "\">" + text + "</font>" : text
+  }
+
+  readonly property string labelHtml: {
+    var parts = []
+    if (showCpu) parts.push(seg("CPU " + cpuPercent + "%", cpuAlert))
+    if (showMem) parts.push("MEM " + Math.round(memPercent) + "%")
+    if (showNet && netIface !== "") parts.push("\u2193" + speedShort(netDown) + " \u2191" + speedShort(netUp))
+    if (showBattery && batteryPresent) parts.push(seg("BAT " + batteryPercent + "%", batteryAlert))
+    return parts.join("&nbsp;&nbsp;&nbsp;")
+  }
+
+  // ---- Alerts (per resource, so the bar can color only the failing segment)
+  readonly property bool batteryAlert: showBattery && batteryPresent && batteryStatus === "Discharging" && batteryPercent > 0 && batteryPercent <= alertBattery
+  readonly property bool cpuAlert: cpuTempC >= alertTemp
+  readonly property bool alertActive: batteryAlert || cpuAlert || diskPercent >= alertDisk
   property var activeAlerts: ({})
 
   // ---- Disk (root filesystem, sampled slowly for alerts + panel)
@@ -87,15 +114,6 @@ BarWidget {
   property string batteryPath: ""
 
   // ---- Bar label
-  readonly property string displayText: {
-    var parts = []
-    if (showCpu) parts.push("CPU " + cpuPercent + "%")
-    if (showMem) parts.push("MEM " + Math.round(memPercent) + "%")
-    if (showNet && netIface !== "") parts.push("\u2193" + speedShort(netDown) + " \u2191" + speedShort(netUp))
-    if (showBattery && batteryPresent) parts.push("BAT " + batteryPercent + "%")
-    return parts.join("   ")
-  }
-
   readonly property var verticalLines: {
     var lines = []
     if (showCpu) lines.push("CPU " + cpuPercent + "%")
@@ -136,14 +154,12 @@ BarWidget {
 
   function checkAlerts() {
     var alerts = []
-    if (showBattery && batteryPresent && batteryStatus === "Discharging" && batteryPercent > 0 && batteryPercent <= alertBattery)
+    if (batteryAlert)
       alerts.push(["battery", "Battery low: " + batteryPercent + "%"])
-    if (cpuTempC >= alertTemp)
+    if (cpuAlert)
       alerts.push(["temp", "CPU hot: " + Math.round(cpuTempC) + "°C"])
     if (diskPercent >= alertDisk)
       alerts.push(["disk", "Disk almost full: " + Math.round(diskPercent) + "%"])
-
-    alertActive = alerts.length > 0
 
     var next = {}
     for (var i = 0; i < alerts.length; i++) {
@@ -532,14 +548,13 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.vertical ? "" : root.displayText
+    text: root.vertical ? "" : root.labelHtml
     labelVisible: !root.vertical
     hasVisualContent: root.vertical ? root.verticalLines.length > 0 : text !== ""
     fixedHeight: root.vertical ? root.verticalLines.length * Style.bar.iconSlot : -1
     horizontalMargin: 8.75
     verticalPadding: 8.75
     tooltipText: root.tooltip
-    active: root.alertActive
 
     onPressed: function(b) {
       if (b === Qt.RightButton) {
