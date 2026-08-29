@@ -16,7 +16,7 @@ An iStat Menus-style system monitor for the [Omarchy](https://omarchy.org/) bar.
   - **Network** — default interface, ↓/↑ speeds, totals since boot, local IP
   - **Battery** — charge, state, power draw, health vs design capacity, cycle count, time remaining
   - **Bar display** — toggle bar segments and alert notifications right in the popup
-- **Alerts** — the bar label turns urgent when the battery runs low, the CPU runs hot, or the disk fills up; optional desktop notifications fire once per alert as it triggers
+- **Alerts** — the bar turns urgent per resource: low battery, hot CPU, full disk — and the network segment turns red on connectivity failure (packet loss / ping timeouts, detected by a periodic probe with failure hysteresis); optional desktop notifications fire once per alert as it triggers
 - **Right-click** — opens `btop` in a floating terminal for the deep dive
 - **Vertical bar aware**, theme-aware (follows your Omarchy theme colors)
 - Hover tooltip with an exact summary
@@ -69,6 +69,8 @@ Full list of keys (all optional — defaults shown):
 | `alertTemp` | `85` | Turn the label urgent when the CPU package exceeds this °C |
 | `alertDisk` | `90` | Turn the label urgent when the root disk exceeds this % |
 | `notifications` | `false` | Fire a desktop notification once as each alert triggers |
+| `pingInterval` | `10000` | Connectivity probe interval in milliseconds |
+| `netAlertFailures` | `3` | Consecutive failed probes before the network segment turns red |
 | `detailCommand` | `btop` floating terminal | Command run on right-click |
 
 Every key can also be set in the widget's entry in `~/.config/omarchy/shell.json`:

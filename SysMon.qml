@@ -60,6 +60,10 @@ BarWidget {
   readonly property int sampleInterval: setting("interval", 2000)
   readonly property string detailCommand: setting("detailCommand", "omarchy-launch-floating-terminal-with-presentation btop")
   readonly property int alertBattery: setting("alertBattery", 20)
+  readonly property int pingInterval: setting("pingInterval", 10000)
+  readonly property string pingHost: setting("pingHost", "1.1.1.1")
+  readonly property int pingCount: setting("pingCount", 3)
+  readonly property int netAlertAfter: setting("netAlertFailures", 3)
   readonly property int alertTemp: setting("alertTemp", 85)
   readonly property int alertDisk: setting("alertDisk", 90)
   readonly property bool notifications: setting("notifications", false)
@@ -94,10 +98,15 @@ BarWidget {
     var parts = []
     if (showCpu) parts.push(seg("CPU " + cpuPercent + "%", cpuAlert ? colorToHex(urgentCol) : fgHex))
     if (showMem) parts.push(seg("MEM " + Math.round(memPercent) + "%", fgHex))
-    if (showNet && netIface !== "") parts.push(seg("\u2193" + speedShort(netDown) + " \u2191" + speedShort(netUp), fgHex))
+    if (showNet && netIface !== "") parts.push(seg("\u2193" + speedShort(netDown) + " \u2191" + speedShort(netUp), netAlert ? colorToHex(urgentCol) : fgHex))
     if (showBattery && batteryPresent) parts.push(seg("BAT " + batteryPercent + "%", batteryAlert ? colorToHex(urgentCol) : fgHex))
     return parts.join("&nbsp;&nbsp;&nbsp;")
   }
+
+  // ---- Connectivity probe (packet loss / ping timeout)
+  property int netFailures: 0
+  property real packetLoss: 0
+  readonly property bool netAlert: showNet && netIface !== "" && netFailures >= netAlertAfter
 
   // ---- Alerts (per resource, so the bar can color only the failing segment)
   readonly property bool batteryAlert: showBattery && batteryPresent && batteryStatus === "Discharging" && batteryPercent > 0 && batteryPercent <= alertBattery
@@ -160,6 +169,8 @@ BarWidget {
       alerts.push(["battery", "Battery low: " + batteryPercent + "%"])
     if (cpuAlert)
       alerts.push(["temp", "CPU hot: " + Math.round(cpuTempC) + "°C"])
+    if (netAlert)
+      alerts.push(["net", packetLoss >= 100 ? "Network down: 100% packet loss" : "Network issue: " + Math.round(packetLoss) + "% packet loss"])
     if (diskPercent >= alertDisk)
       alerts.push(["disk", "Disk almost full: " + Math.round(diskPercent) + "%"])
 
@@ -491,6 +502,29 @@ BarWidget {
 
   Process {
     id: notifyProc
+  }
+
+  Process {
+    id: pingProc
+    command: ["ping", "-c", String(root.pingCount), "-W", "1", root.pingHost]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var m = String(text).match(/([\d.]+)% packet loss/)
+        root.packetLoss = m ? Number(m[1]) : 100
+      }
+    }
+    onExited: function(exitCode) {
+      var ok = exitCode === 0 && root.packetLoss < 100
+      root.netFailures = ok ? 0 : root.netFailures + 1
+    }
+  }
+
+  Timer {
+    interval: root.pingInterval
+    running: root.showNet && root.netIface !== "" && !pingProc.running
+    repeat: true
+    onTriggered: pingProc.running = true
   }
 
   Process {
