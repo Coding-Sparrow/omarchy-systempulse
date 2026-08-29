@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "id": "coding-sparrow.sysmon",
-  "name": "System monitor",
+  "id": "coding-sparrow.systempulse",
+  "name": "System Pulse",
   "version": "1.0.0",
   "author": "Coding-Sparrow",
-  "description": "Live CPU and memory usage in the bar, iStat-style. Click to open btop.",
+  "description": "Live CPU, memory, network and battery readings in the bar, iStat-style.",
   "kinds": [
     "bar-widget"
   ],
@@ -12,8 +12,8 @@
     "barWidget": "SysMon.qml"
   },
   "barWidget": {
-    "displayName": "System monitor",
-    "description": "Live CPU and memory usage in the bar, iStat-style. Click to open btop.",
+    "displayName": "System Pulse",
+    "description": "Live CPU, memory, network and battery readings in the bar, iStat-style.",
     "category": "System",
     "defaultSection": "right",
     "allowMultiple": false

@@ -1,4 +1,4 @@
-# Omarchy Sysmon
+# System Pulse — an iStat-style system monitor for Omarchy
 
 An iStat Menus-style system monitor for the [Omarchy](https://omarchy.org/) bar. Live CPU, memory, disk, network, battery, and temperature readings in the status bar, with a detail popup — all sampled directly from `/proc` and `/sys` with zero background processes.
 
@@ -30,14 +30,14 @@ Battery, temperature, and network sections appear automatically when the hardwar
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/Coding-Sparrow/omarchy-sysmon.git --enable
+omarchy plugin add https://github.com/Coding-Sparrow/omarchy-systempulse.git --enable
 ```
 
 ## Remove
 
 ```bash
-omarchy plugin disable coding-sparrow.sysmon   # hide it from the bar
-omarchy plugin remove coding-sparrow.sysmon    # delete it entirely
+omarchy plugin disable coding-sparrow.systempulse   # hide it from the bar
+omarchy plugin remove coding-sparrow.systempulse    # delete it entirely
 ```
 
 ## Settings
@@ -46,7 +46,7 @@ Edit the widget's entry in `~/.config/omarchy/shell.json` (hot-reloads on save):
 
 ```json
 {
-  "id": "coding-sparrow.sysmon",
+  "id": "coding-sparrow.systempulse",
   "showCpu": true,
   "showMem": true,
   "showNet": true,
