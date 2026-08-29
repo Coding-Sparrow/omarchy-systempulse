@@ -84,16 +84,18 @@ BarWidget {
     return "#" + hx(q.r) + hx(q.g) + hx(q.b)
   }
 
-  function seg(text, alert) {
-    return alert ? "<font color=\"" + colorToHex(urgentCol) + "\">" + text + "</font>" : text
+  function seg(text, colorHexStr) {
+    return "<font color=\"" + colorHexStr + "\">" + text + "</font>"
   }
+
+  readonly property string fgHex: colorToHex(fg)
 
   readonly property string labelHtml: {
     var parts = []
-    if (showCpu) parts.push(seg("CPU " + cpuPercent + "%", cpuAlert))
-    if (showMem) parts.push("MEM " + Math.round(memPercent) + "%")
-    if (showNet && netIface !== "") parts.push("\u2193" + speedShort(netDown) + " \u2191" + speedShort(netUp))
-    if (showBattery && batteryPresent) parts.push(seg("BAT " + batteryPercent + "%", batteryAlert))
+    if (showCpu) parts.push(seg("CPU " + cpuPercent + "%", cpuAlert ? colorToHex(urgentCol) : fgHex))
+    if (showMem) parts.push(seg("MEM " + Math.round(memPercent) + "%", fgHex))
+    if (showNet && netIface !== "") parts.push(seg("\u2193" + speedShort(netDown) + " \u2191" + speedShort(netUp), fgHex))
+    if (showBattery && batteryPresent) parts.push(seg("BAT " + batteryPercent + "%", batteryAlert ? colorToHex(urgentCol) : fgHex))
     return parts.join("&nbsp;&nbsp;&nbsp;")
   }
 
