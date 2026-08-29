@@ -4,10 +4,11 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
+
 Panel {
   id: root
-  moduleName: "ravattailor.sysmon"
-  ipcTarget: "ravattailor.sysmon"
+  moduleName: "coding-sparrow.systempulse"
+  ipcTarget: "coding-sparrow.systempulse"
   manageIpc: false
 
   property var anchorItem: null
@@ -20,8 +21,6 @@ Panel {
   readonly property color dim: Qt.darker(fg, 1.5)
   readonly property color track: Qt.rgba(fg.r, fg.g, fg.b, 0.12)
 
-  property real diskTotalBytes: 0
-  property real diskUsedBytes: 0
   property string localIp: ""
 
   function open() {
@@ -39,8 +38,17 @@ Panel {
   }
 
   function refreshOnce() {
-    dfProc.running = true
     ipProc.running = true
+  }
+
+  function persistSettings(values) {
+    var entry = { id: root.moduleName }
+    for (var existing in root.settings) if (existing !== "id") entry[existing] = root.settings[existing]
+    for (var key in values) entry[key] = values[key]
+    root.settings = entry
+    if (root.hostWidget && "settings" in root.hostWidget) root.hostWidget.settings = entry
+    if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
+      root.bar.shell.updateEntryInline(root.moduleName, entry)
   }
 
   onOpenedChanged: {
@@ -73,21 +81,6 @@ Panel {
     if (bps < 1024) return Math.round(bps) + " B/s"
     if (bps < 1048576) return (bps / 1024).toFixed(bps < 10240 ? 1 : 0) + " kB/s"
     return (bps / 1048576).toFixed(1) + " MB/s"
-  }
-
-  Process {
-    id: dfProc
-    command: ["bash", "-c", "df -B1 --output=size,used / 2>/dev/null | tail -1"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var f = String(text).trim().split(/\s+/)
-        if (f.length >= 2) {
-          root.diskTotalBytes = Number(f[0])
-          root.diskUsedBytes = Number(f[1])
-        }
-      }
-    }
   }
 
   Process {
@@ -212,6 +205,33 @@ Panel {
         }
       }
 
+      // ================================================== HISTORY
+      Column {
+        width: parent.width
+        spacing: Style.space(10)
+
+        Text {
+          text: "HISTORY"
+          color: root.dim
+          font.family: root.fam
+          font.pixelSize: Style.font.caption
+          font.letterSpacing: 1
+          font.bold: true
+        }
+
+        Loader {
+          width: parent.width
+          active: root.hw !== null
+          source: Qt.resolvedUrl("Sparklines.qml")
+          onLoaded: {
+            item.hw = root.hw
+            item.opened = Qt.binding(function() { return root.opened })
+            item.fg = Qt.binding(function() { return root.fg })
+            item.fam = Qt.binding(function() { return root.fam })
+          }
+        }
+      }
+
       // ================================================== MEMORY
       Column {
         width: parent.width
@@ -289,7 +309,7 @@ Panel {
         }
 
         Text {
-          text: root.hw ? ("Root  " + (root.diskTotalBytes > 0 ? (root.diskUsedBytes / 1073741824).toFixed(0) + " / " + (root.diskTotalBytes / 1073741824).toFixed(0) + " GB (" + Math.round(100 * root.diskUsedBytes / root.diskTotalBytes) + "%)" : "—")) : ""
+          text: root.hw ? ("Root  " + (root.hw.diskTotalBytes > 0 ? (root.hw.diskUsedBytes / 1073741824).toFixed(0) + " / " + (root.hw.diskTotalBytes / 1073741824).toFixed(0) + " GB (" + Math.round(root.hw.diskPercent) + "%)" : "—")) : ""
           color: root.fg
           font.family: root.fam
           font.pixelSize: Style.font.bodySmall
@@ -300,10 +320,10 @@ Panel {
           height: Style.space(6)
           radius: Style.cornerRadius > 0 ? height / 2 : 0
           color: root.track
-          visible: root.diskTotalBytes > 0
+          visible: root.hw && root.hw.diskTotalBytes > 0
 
           Rectangle {
-            width: Math.round(parent.width * (root.diskTotalBytes > 0 ? root.diskUsedBytes / root.diskTotalBytes : 0))
+            width: Math.round(parent.width * (root.hw && root.hw.diskTotalBytes > 0 ? root.hw.diskUsedBytes / root.hw.diskTotalBytes : 0))
             height: parent.height
             radius: parent.radius
             color: Style.selectedStateColor(root.fg, Color.accent)
@@ -392,6 +412,57 @@ Panel {
           color: root.dim
           font.family: root.fam
           font.pixelSize: Style.font.bodySmall
+        }
+      }
+
+      // ================================================== BAR DISPLAY
+      Column {
+        width: parent.width
+        spacing: Style.space(4)
+
+        Text {
+          text: "BAR DISPLAY"
+          color: root.dim
+          font.family: root.fam
+          font.pixelSize: Style.font.caption
+          font.letterSpacing: 1
+          font.bold: true
+        }
+
+        Repeater {
+          model: [
+            { key: "showCpu", label: "CPU" },
+            { key: "showMem", label: "Memory" },
+            { key: "showNet", label: "Network" },
+            { key: "showBattery", label: "Battery" },
+            { key: "notifications", label: "Alert notifications" }
+          ]
+
+          delegate: Item {
+            width: parent.width
+            height: Style.space(24)
+
+            Text {
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              text: modelData.label
+              color: root.fg
+              font.family: root.fam
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            ToggleSwitch {
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              checked: root.hw ? root.hw.setting(modelData.key, modelData.key === "notifications" ? false : true) : false
+              foreground: root.fg
+              onToggled: {
+                var patch = {}
+                patch[modelData.key] = checked
+                root.persistSettings(patch)
+              }
+            }
+          }
         }
       }
     }

@@ -6,7 +6,7 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "ravattailor.sysmon"
+  moduleName: "coding-sparrow.systempulse"
 
   // ---- CPU
   property int cpuPercent: 0
@@ -59,6 +59,27 @@ BarWidget {
   readonly property bool showBattery: setting("showBattery", true)
   readonly property int sampleInterval: setting("interval", 2000)
   readonly property string detailCommand: setting("detailCommand", "omarchy-launch-floating-terminal-with-presentation btop")
+  readonly property int alertBattery: setting("alertBattery", 20)
+  readonly property int alertTemp: setting("alertTemp", 85)
+  readonly property int alertDisk: setting("alertDisk", 90)
+  readonly property bool notifications: setting("notifications", false)
+
+  // ---- History buffers (fixed-length ring, oldest first)
+  property var cpuHistory: []
+  property var memHistory: []
+  property var netHistory: []
+  property var batHistory: []
+  property int historyVersion: 0
+  readonly property int historyMax: 120
+
+  // ---- Alerts
+  property bool alertActive: false
+  property var activeAlerts: ({})
+
+  // ---- Disk (root filesystem, sampled slowly for alerts + panel)
+  property real diskPercent: 0
+  property real diskUsedBytes: 0
+  property real diskTotalBytes: 0
 
   // ---- Paths discovered at startup
   property string cpuTempPath: ""
@@ -108,6 +129,38 @@ BarWidget {
     return Math.max(0, Math.min(100, Math.round(v)))
   }
 
+  function pushHistory(arr, value) {
+    arr.push(value)
+    if (arr.length > historyMax) arr.shift()
+  }
+
+  function checkAlerts() {
+    var alerts = []
+    if (showBattery && batteryPresent && batteryStatus === "Discharging" && batteryPercent > 0 && batteryPercent <= alertBattery)
+      alerts.push(["battery", "Battery low: " + batteryPercent + "%"])
+    if (cpuTempC >= alertTemp)
+      alerts.push(["temp", "CPU hot: " + Math.round(cpuTempC) + "°C"])
+    if (diskPercent >= alertDisk)
+      alerts.push(["disk", "Disk almost full: " + Math.round(diskPercent) + "%"])
+
+    alertActive = alerts.length > 0
+
+    var next = {}
+    for (var i = 0; i < alerts.length; i++) {
+      var key = alerts[i][0]
+      next[key] = true
+      if (notifications && !activeAlerts[key])
+        sendNotification("System Pulse — " + alerts[i][1])
+    }
+    activeAlerts = next
+  }
+
+  function sendNotification(message) {
+    if (notifyProc.running) return
+    notifyProc.command = ["omarchy-notification-send", message]
+    notifyProc.running = true
+  }
+
   function refresh() {
     sample()
   }
@@ -151,6 +204,7 @@ BarWidget {
       if (dT > 0) root.cpuPercent = clampPct(100 * dB / dT)
     }
     root.prevCpu = totals
+    pushHistory(cpuHistory, root.cpuPercent)
 
     var per = []
     for (var k = 0; k < newCores.length; k++) {
@@ -203,6 +257,7 @@ BarWidget {
     root.swapTotalGb = swapTotalKb / 1048576
     root.swapUsedGb = (swapTotalKb - swapFreeKb) / 1048576
     root.swapPercent = swapTotalKb > 0 ? 100 * (swapTotalKb - swapFreeKb) / swapTotalKb : 0
+    pushHistory(memHistory, root.memPercent)
   }
 
   function diskDeviceWanted(name) {
@@ -306,6 +361,7 @@ BarWidget {
     root.prevNet = { time: now, iface: root.netIface, rx: s.rx, tx: s.tx }
     root.netRxTotal = s.rx
     root.netTxTotal = s.tx
+    pushHistory(netHistory, root.netDown + root.netUp)
   }
 
   function parseBattery(content) {
@@ -334,6 +390,7 @@ BarWidget {
       root.batteryTimeEmptySec = map["POWER_SUPPLY_STATUS"] === "Discharging" ? energyNow / power * 3600 : 0
     else
       root.batteryTimeEmptySec = 0
+    pushHistory(batHistory, root.batteryPercent)
   }
 
   function parseTemp(text, target) {
@@ -382,7 +439,40 @@ BarWidget {
     running: true
     repeat: true
     triggeredOnStart: true
-    onTriggered: root.sample()
+    onTriggered: {
+      root.sample()
+      root.checkAlerts()
+      root.historyVersion++
+    }
+  }
+
+  Process {
+    id: dfProc
+    command: ["bash", "-c", "df -B1 --output=size,used / 2>/dev/null | tail -1"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var f = String(text).trim().split(/\s+/)
+        if (f.length >= 2) {
+          root.diskTotalBytes = Number(f[0])
+          root.diskUsedBytes = Number(f[1])
+          if (root.diskTotalBytes > 0)
+            root.diskPercent = 100 * root.diskUsedBytes / root.diskTotalBytes
+        }
+      }
+    }
+  }
+
+  Timer {
+    interval: 60000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: dfProc.running = true
+  }
+
+  Process {
+    id: notifyProc
   }
 
   Process {
@@ -423,7 +513,7 @@ BarWidget {
   implicitHeight: button.implicitHeight
 
   IpcHandler {
-    target: "ravattailor.sysmon"
+    target: "coding-sparrow.systempulse"
 
     function refresh(): void { root.broadcast("refresh") }
     function open(): void {
@@ -448,6 +538,7 @@ BarWidget {
     horizontalMargin: 8.75
     verticalPadding: 8.75
     tooltipText: root.tooltip
+    active: root.alertActive
 
     onPressed: function(b) {
       if (b === Qt.RightButton) {

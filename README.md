@@ -10,10 +10,13 @@ An iStat Menus-style system monitor for the [Omarchy](https://omarchy.org/) bar.
 - **Bar label** — compact, iStat-style: `CPU 6%   MEM 30%   ↓22k ↑1k   BAT 90%` (each segment toggleable)
 - **Detail popup** (click the bar label):
   - **CPU** — usage hero, load averages, frequency, package temperature, per-core mini-bars, uptime
+  - **History** — live sparklines for CPU, memory, network and battery (~4 minutes of samples)
   - **Memory** — used/total, cached, swap
   - **Disk** — root usage, live read/write speeds, NVMe temperature
   - **Network** — default interface, ↓/↑ speeds, totals since boot, local IP
   - **Battery** — charge, state, power draw, health vs design capacity, cycle count, time remaining
+  - **Bar display** — toggle bar segments and alert notifications right in the popup
+- **Alerts** — the bar label turns urgent when the battery runs low, the CPU runs hot, or the disk fills up; optional desktop notifications fire once per alert as it triggers
 - **Right-click** — opens `btop` in a floating terminal for the deep dive
 - **Vertical bar aware**, theme-aware (follows your Omarchy theme colors)
 - Hover tooltip with an exact summary
@@ -42,28 +45,37 @@ omarchy plugin remove coding-sparrow.systempulse    # delete it entirely
 
 ## Settings
 
-Edit the widget's entry in `~/.config/omarchy/shell.json` (hot-reloads on save):
+Easiest first: **click the bar widget** and use the toggles in the popup's "Bar display" section — they persist automatically.
 
-```json
-{
-  "id": "coding-sparrow.systempulse",
-  "showCpu": true,
-  "showMem": true,
-  "showNet": true,
-  "showBattery": true,
-  "interval": 2000,
-  "detailCommand": "omarchy-launch-floating-terminal-with-presentation btop"
-}
+You can also use the Omarchy CLI (no JSON editing needed):
+
+```bash
+omarchy bar set coding-sparrow.systempulse showNet false
+omarchy bar set coding-sparrow.systempulse alertTemp 80
+omarchy bar set coding-sparrow.systempulse notifications true
+omarchy bar set coding-sparrow.systempulse interval 1000
 ```
+
+Full list of keys (all optional — defaults shown):
 
 | Key | Default | Purpose |
 |-----|---------|---------|
-| `showCpu` | `true` | CPU segment in the bar label |
-| `showMem` | `true` | Memory segment |
-| `showNet` | `true` | Network ↓/↑ segment |
-| `showBattery` | `true` | Battery segment (only shows when a battery exists) |
-| `interval` | `2000` | Sample interval in milliseconds |
+| `showCpu` | `true` | CPU segment in the bar label and history |
+| `showMem` | `true` | Memory segment and history |
+| `showNet` | `true` | Network segment and history |
+| `showBattery` | `true` | Battery segment and history (auto-hides without a battery) |
+| `interval` | `2000` | Sample interval in milliseconds (500–10000) |
+| `alertBattery` | `20` | Turn the label urgent when the battery (discharging) falls below this % |
+| `alertTemp` | `85` | Turn the label urgent when the CPU package exceeds this °C |
+| `alertDisk` | `90` | Turn the label urgent when the root disk exceeds this % |
+| `notifications` | `false` | Fire a desktop notification once as each alert triggers |
 | `detailCommand` | `btop` floating terminal | Command run on right-click |
+
+Every key can also be set in the widget's entry in `~/.config/omarchy/shell.json`:
+
+```json
+{ "id": "coding-sparrow.systempulse", "showNet": false, "notifications": true }
+```
 
 ## How it works
 

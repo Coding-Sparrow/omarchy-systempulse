@@ -16,6 +16,85 @@
     "description": "Live CPU, memory, network and battery readings in the bar, iStat-style.",
     "category": "System",
     "defaultSection": "right",
-    "allowMultiple": false
+    "allowMultiple": false,
+    "defaults": {
+      "showCpu": true,
+      "showMem": true,
+      "showNet": true,
+      "showBattery": true,
+      "interval": 2000,
+      "alertBattery": 20,
+      "alertTemp": 85,
+      "alertDisk": 90,
+      "notifications": false
+    },
+    "schema": [
+      {
+        "key": "showCpu",
+        "type": "boolean",
+        "label": "Show CPU",
+        "defaultValue": true
+      },
+      {
+        "key": "showMem",
+        "type": "boolean",
+        "label": "Show memory",
+        "defaultValue": true
+      },
+      {
+        "key": "showNet",
+        "type": "boolean",
+        "label": "Show network",
+        "defaultValue": true
+      },
+      {
+        "key": "showBattery",
+        "type": "boolean",
+        "label": "Show battery",
+        "defaultValue": true
+      },
+      {
+        "key": "interval",
+        "type": "integer",
+        "label": "Sample interval (ms)",
+        "min": 500,
+        "max": 10000,
+        "step": 500,
+        "defaultValue": 2000
+      },
+      {
+        "key": "alertBattery",
+        "type": "integer",
+        "label": "Battery alert below (%)",
+        "min": 0,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 20
+      },
+      {
+        "key": "alertTemp",
+        "type": "integer",
+        "label": "CPU temp alert above (°C)",
+        "min": 40,
+        "max": 110,
+        "step": 5,
+        "defaultValue": 85
+      },
+      {
+        "key": "alertDisk",
+        "type": "integer",
+        "label": "Disk alert above (%)",
+        "min": 50,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 90
+      },
+      {
+        "key": "notifications",
+        "type": "boolean",
+        "label": "Desktop notifications on alerts",
+        "defaultValue": false
+      }
+    ]
   }
 }
