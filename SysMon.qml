@@ -525,6 +525,7 @@ BarWidget {
     function toggle(): void {
       root.broadcast("togglePanel")
     }
+
   }
 
   WidgetButton {

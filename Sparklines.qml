@@ -30,21 +30,26 @@ Item {
   implicitHeight: col.implicitHeight
   implicitWidth: col.implicitWidth
 
-  Column {
+  Grid {
     id: col
+    columns: 2
     width: parent.width
-    spacing: Style.space(10)
+    columnSpacing: Style.space(14)
+    rowSpacing: Style.space(8)
 
     // ---- CPU
     Column {
-      width: parent.width
+      width: (col.width - Style.space(14)) / 2
       spacing: Style.space(4)
       visible: root.hw ? root.hw.showCpu : true
 
-      Row {
+      Item {
         width: parent.width
+        height: Math.max(cpuTitle.implicitHeight, cpuVal.implicitHeight)
 
         Text {
+          id: cpuTitle
+          anchors.left: parent.left
           text: "CPU"
           color: root.dimCol
           font.family: root.fam
@@ -52,6 +57,7 @@ Item {
         }
 
         Text {
+          id: cpuVal
           anchors.right: parent.right
           text: root.hw ? root.hw.cpuPercent + "%" : "—"
           color: root.fg
@@ -94,14 +100,17 @@ Item {
 
     // ---- Memory
     Column {
-      width: parent.width
+      width: (col.width - Style.space(14)) / 2
       spacing: Style.space(4)
       visible: root.hw ? root.hw.showMem : true
 
-      Row {
+      Item {
         width: parent.width
+        height: Math.max(memTitle.implicitHeight, memVal.implicitHeight)
 
         Text {
+          id: memTitle
+          anchors.left: parent.left
           text: "Memory"
           color: root.dimCol
           font.family: root.fam
@@ -109,6 +118,7 @@ Item {
         }
 
         Text {
+          id: memVal
           anchors.right: parent.right
           text: root.hw ? Math.round(root.hw.memPercent) + "%" : "—"
           color: root.fg
@@ -151,14 +161,17 @@ Item {
 
     // ---- Network
     Column {
-      width: parent.width
+      width: (col.width - Style.space(14)) / 2
       spacing: Style.space(4)
       visible: root.hw ? root.hw.showNet : true
 
-      Row {
+      Item {
         width: parent.width
+        height: Math.max(netTitle.implicitHeight, netVal.implicitHeight)
 
         Text {
+          id: netTitle
+          anchors.left: parent.left
           text: "Network"
           color: root.dimCol
           font.family: root.fam
@@ -166,6 +179,7 @@ Item {
         }
 
         Text {
+          id: netVal
           anchors.right: parent.right
           text: root.hw && root.hw.netIface !== "" ? ("\u2193" + root.hw.speed(root.hw.netDown) + "  \u2191" + root.hw.speed(root.hw.netUp)) : "—"
           color: root.fg
@@ -212,14 +226,17 @@ Item {
 
     // ---- Battery
     Column {
-      width: parent.width
+      width: (col.width - Style.space(14)) / 2
       spacing: Style.space(4)
       visible: root.hw ? root.hw.showBattery && root.hw.batteryPresent : false
 
-      Row {
+      Item {
         width: parent.width
+        height: Math.max(batTitle.implicitHeight, batVal.implicitHeight)
 
         Text {
+          id: batTitle
+          anchors.left: parent.left
           text: "Battery"
           color: root.dimCol
           font.family: root.fam
@@ -227,6 +244,7 @@ Item {
         }
 
         Text {
+          id: batVal
           anchors.right: parent.right
           text: root.hw && root.hw.batteryPresent ? root.hw.batteryPercent + "%" : "—"
           color: root.fg
