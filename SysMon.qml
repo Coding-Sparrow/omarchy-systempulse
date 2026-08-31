@@ -171,8 +171,24 @@ BarWidget {
 
   function sendNotification(message) {
     if (notifyProc.running) return
-    notifyProc.command = ["omarchy-notification-send", message]
+    // Clicking the toast must open the panel: the CPU-hot card sits in the
+    // top-right overlay, directly over this widget, and steals bar clicks
+    // until it expires (hover pauses the timer, so it can sit there forever).
+    notifyProc.command = [
+      "omarchy-notification-send",
+      "--app-name", "System Pulse",
+      "-u", "normal",
+      "-t", "8000",
+      message,
+      "--exec", "omarchy-shell", "coding-sparrow.systempulse", "open"
+    ]
     notifyProc.running = true
+  }
+
+  function dismissPulseToasts() {
+    if (dismissProc.running) return
+    dismissProc.command = ["omarchy-shell", "-q", "notifications", "dismiss", "System Pulse"]
+    dismissProc.running = true
   }
 
   function refresh() {
@@ -490,6 +506,10 @@ BarWidget {
   }
 
   Process {
+    id: dismissProc
+  }
+
+  Process {
     id: pingProc
     command: ["ping", "-c", String(root.pingCount), "-W", "1", root.pingHost]
     stdout: StdioCollector {
@@ -553,16 +573,9 @@ BarWidget {
     target: "coding-sparrow.systempulse"
 
     function refresh(): void { root.broadcast("refresh") }
-    function open(): void {
-      root.broadcast("openPanel")
-    }
-    function close(): void {
-      root.broadcast("closePanel")
-    }
-    function toggle(): void {
-      root.broadcast("togglePanel")
-    }
-
+    function open(): void { root.broadcast("openPanel") }
+    function close(): void { root.broadcast("closePanel") }
+    function toggle(): void { root.broadcast("togglePanel") }
   }
 
   WidgetButton {
@@ -579,6 +592,7 @@ BarWidget {
     tooltipText: root.tooltip
 
     onPressed: function(b) {
+      root.dismissPulseToasts()
       if (b === Qt.RightButton) {
         if (root.bar) root.bar.run(root.detailCommand)
       } else {
@@ -630,8 +644,14 @@ BarWidget {
   // ---- Detail popup
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
 
+  // Bar.findPanelWidget requires open/close/opened on the widget root.
+  function open() { openPanel() }
+  function close() { closePanel() }
+  function toggle() { togglePanel() }
+
   function openPanel() {
     if (panelLoader.item) panelLoader.item.open()
+    dismissPulseToasts()
   }
 
   function closePanel() {
@@ -640,6 +660,7 @@ BarWidget {
 
   function togglePanel() {
     if (panelLoader.item) panelLoader.item.toggle()
+    dismissPulseToasts()
   }
 
   function injectPanel() {
