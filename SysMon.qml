@@ -76,31 +76,16 @@ BarWidget {
   property int historyVersion: 0
   readonly property int historyMax: 120
 
-  // ---- Bar label (rich text: failing resources render urgent-colored inline)
+  // ---- Bar label segments (real QML Text items: WidgetButton renders PlainText only)
   readonly property color urgentCol: root.bar ? root.bar.urgent : Color.urgent
 
-  function colorToHex(c) {
-    var q = Qt.color(c)
-    function hx(v) {
-      var s = Math.round(v * 255).toString(16)
-      return s.length < 2 ? "0" + s : s
-    }
-    return "#" + hx(q.r) + hx(q.g) + hx(q.b)
-  }
-
-  function seg(text, colorHexStr) {
-    return "<font color=\"" + colorHexStr + "\">" + text + "</font>"
-  }
-
-  readonly property string fgHex: colorToHex(fg)
-
-  readonly property string labelHtml: {
-    var parts = []
-    if (showCpu) parts.push(seg("CPU " + cpuPercent + "%", cpuAlert ? colorToHex(urgentCol) : fgHex))
-    if (showMem) parts.push(seg("MEM " + Math.round(memPercent) + "%", fgHex))
-    if (showNet && netIface !== "") parts.push(seg("\u2193" + speedShort(netDown) + " \u2191" + speedShort(netUp), netAlert ? colorToHex(urgentCol) : fgHex))
-    if (showBattery && batteryPresent) parts.push(seg("BAT " + batteryPercent + "%", batteryAlert ? colorToHex(urgentCol) : fgHex))
-    return parts.join("&nbsp;&nbsp;&nbsp;")
+  readonly property var barSegments: {
+    var segs = []
+    if (showCpu) segs.push({ text: "CPU " + cpuPercent + "%", alert: cpuAlert })
+    if (showMem) segs.push({ text: "MEM " + Math.round(memPercent) + "%", alert: false })
+    if (showNet && netIface !== "") segs.push({ text: "\u2193" + speedShort(netDown) + " \u2191" + speedShort(netUp), alert: netAlert })
+    if (showBattery && batteryPresent) segs.push({ text: "BAT " + batteryPercent + "%", alert: batteryAlert })
+    return segs
   }
 
   // ---- Connectivity probe (packet loss / ping timeout)
@@ -584,10 +569,11 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.vertical ? "" : root.labelHtml
-    labelVisible: !root.vertical
-    hasVisualContent: root.vertical ? root.verticalLines.length > 0 : text !== ""
+    text: ""
+    labelVisible: false
+    hasVisualContent: root.vertical ? root.verticalLines.length > 0 : root.barSegments.length > 0
     fixedHeight: root.vertical ? root.verticalLines.length * Style.bar.iconSlot : -1
+    fixedWidth: root.vertical ? -1 : labelsRow.implicitWidth
     horizontalMargin: 8.75
     verticalPadding: 8.75
     tooltipText: root.tooltip
@@ -597,6 +583,27 @@ BarWidget {
         if (root.bar) root.bar.run(root.detailCommand)
       } else {
         root.togglePanel()
+      }
+    }
+
+    Row {
+      id: labelsRow
+      visible: !root.vertical
+      anchors.centerIn: parent
+      spacing: Style.spaceReal(8)
+
+      Repeater {
+        model: root.barSegments
+
+        Text {
+          required property var modelData
+          text: modelData.text
+          color: modelData.alert ? root.urgentCol : button.foreground
+          font.family: button.fontFamily
+          font.pixelSize: button.fontSize
+          renderType: Text.NativeRendering
+          verticalAlignment: Text.AlignVCenter
+        }
       }
     }
 
