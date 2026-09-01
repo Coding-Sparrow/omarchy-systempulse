@@ -23,6 +23,7 @@ Panel {
 
   property string localIp: ""
   property string focusSection: ""
+  property bool settingsOpen: false
 
   function revealSection(id) {
     focusSection = id || ""
@@ -36,6 +37,7 @@ Panel {
     if (id === "mem" || id === "disk") return memBox
     if (id === "net") return netCol
     if (id === "battery") return batCol
+    if (id === "proc") return procCol
     return null
   }
 
@@ -436,6 +438,90 @@ Panel {
         }
       }
 
+      // ================================================== PROCESSES (hero)
+      Column {
+        id: procCol
+        width: parent.width
+        spacing: Style.space(6)
+        visible: root.hw && root.hw.topProcs && root.hw.topProcs.length > 0
+
+        Item {
+          width: parent.width
+          height: procTitle.implicitHeight
+
+          Text {
+            id: procTitle
+            anchors.left: parent.left
+            text: "PROCESSES"
+            color: root.headingColor("proc")
+            font.family: root.fam
+            font.pixelSize: Style.font.caption
+            font.letterSpacing: 1
+            font.bold: true
+          }
+
+          Text {
+            anchors.right: parent.right
+            anchors.baseline: procTitle.baseline
+            text: "click → btop"
+            color: root.dim
+            font.family: root.fam
+            font.pixelSize: Style.font.caption
+          }
+        }
+
+        Repeater {
+          model: root.hw ? root.hw.topProcs : []
+
+          Item {
+            required property var modelData
+            width: contentCol.width
+            height: Style.space(22)
+
+            Rectangle {
+              anchors.fill: parent
+              anchors.leftMargin: -Style.space(4)
+              anchors.rightMargin: -Style.space(4)
+              radius: 4
+              color: procMouse.containsMouse ? root.track : "transparent"
+            }
+
+            Text {
+              anchors.left: parent.left
+              anchors.right: procStats.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              text: modelData.name
+              elide: Text.ElideRight
+              color: root.fg
+              font.family: root.fam
+              font.pixelSize: Style.font.body
+            }
+
+            Text {
+              id: procStats
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              text: modelData.cpu.toFixed(1) + "% cpu   " + modelData.mem.toFixed(1) + "% mem"
+              color: root.dim
+              font.family: root.fam
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            MouseArea {
+              id: procMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: {
+                if (root.bar && root.hw)
+                  root.bar.run(root.hw.detailCommand)
+              }
+            }
+          }
+        }
+      }
+
       // ================================================== MID ROW: NETWORK | BATTERY
       Row {
         width: parent.width
@@ -521,55 +607,6 @@ Panel {
         }
       }
 
-      // ================================================== PROCESSES
-      Column {
-        width: parent.width
-        spacing: Style.space(6)
-        visible: root.hw && root.hw.topProcs && root.hw.topProcs.length > 0
-
-        Text {
-          text: "PROCESSES"
-          color: root.headingColor("cpu")
-          font.family: root.fam
-          font.pixelSize: Style.font.caption
-          font.letterSpacing: 1
-          font.bold: true
-        }
-
-        Repeater {
-          model: root.hw ? root.hw.topProcs : []
-
-          Item {
-            required property var modelData
-            width: contentCol.width
-            height: procName.implicitHeight
-
-            Text {
-              id: procName
-              anchors.left: parent.left
-              anchors.right: procStats.left
-              anchors.rightMargin: Style.space(8)
-              anchors.verticalCenter: parent.verticalCenter
-              text: modelData.name
-              elide: Text.ElideRight
-              color: root.fg
-              font.family: root.fam
-              font.pixelSize: Style.font.bodySmall
-            }
-
-            Text {
-              id: procStats
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              text: modelData.cpu.toFixed(1) + "% cpu   " + modelData.mem.toFixed(1) + "% mem"
-              color: root.dim
-              font.family: root.fam
-              font.pixelSize: Style.font.bodySmall
-            }
-          }
-        }
-      }
-
       // ================================================== HISTORY
       Column {
         width: parent.width
@@ -618,17 +655,41 @@ Panel {
         width: parent.width
         spacing: Style.space(4)
 
-        Text {
-          text: "BAR DISPLAY"
-          color: root.dim
-          font.family: root.fam
-          font.pixelSize: Style.font.caption
-          font.letterSpacing: 1
-          font.bold: true
+        Item {
+          width: parent.width
+          height: settingsTitle.implicitHeight
+
+          Text {
+            id: settingsTitle
+            anchors.left: parent.left
+            text: root.settingsOpen ? "BAR DISPLAY  \u25BE" : "BAR DISPLAY  \u25B8"
+            color: root.dim
+            font.family: root.fam
+            font.pixelSize: Style.font.caption
+            font.letterSpacing: 1
+            font.bold: true
+          }
+
+          Text {
+            visible: !root.settingsOpen
+            anchors.right: parent.right
+            anchors.baseline: settingsTitle.baseline
+            text: "disk, net, battery\u2026"
+            color: root.dim
+            font.family: root.fam
+            font.pixelSize: Style.font.caption
+          }
+
+          MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.settingsOpen = !root.settingsOpen
+          }
         }
 
         Grid {
           id: togglesGrid
+          visible: root.settingsOpen
           columns: 2
           width: parent.width
           columnSpacing: Style.space(12)
@@ -638,11 +699,11 @@ Panel {
             model: [
               { key: "showCpu", label: "CPU", fallback: true },
               { key: "showMem", label: "Memory", fallback: true },
-              { key: "showNet", label: "Network", fallback: true },
-              { key: "showBattery", label: "Battery", fallback: true },
-              { key: "showDisk", label: "Disk", fallback: true },
+              { key: "showNet", label: "Network", fallback: false },
+              { key: "showBattery", label: "Battery", fallback: false },
+              { key: "showDisk", label: "Disk", fallback: false },
               { key: "showGpu", label: "GPU", fallback: true },
-              { key: "compactBar", label: "Compact bar", fallback: false },
+              { key: "compactBar", label: "Compact bar", fallback: true },
               { key: "checkConnectivity", label: "Ping check", fallback: false },
               { key: "notifications", label: "Alert notifications", fallback: false }
             ]
@@ -663,7 +724,7 @@ Panel {
               ToggleSwitch {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                checked: root.hw ? root.hw.setting(modelData.key, modelData.fallback) : false
+                checked: root.hw && root.hw.flag ? root.hw.flag(modelData.key, modelData.fallback) : false
                 foreground: root.fg
                 onToggled: {
                   var patch = {}

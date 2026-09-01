@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "coding-sparrow.systempulse",
   "name": "System Pulse",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "Coding-Sparrow",
-  "description": "Live CPU, memory, GPU, network and battery readings in the bar, iStat-style.",
+  "description": "Glanceable CPU and memory in the bar, with a process-first detail popup.",
   "kinds": [
     "bar-widget"
   ],
@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "System Pulse",
-    "description": "Live CPU, memory, GPU, network and battery readings in the bar, iStat-style.",
+    "description": "Glanceable CPU and memory in the bar, with a process-first detail popup.",
     "category": "System",
     "aliases": [
       "cpu",
@@ -32,11 +32,11 @@
     "defaults": {
       "showCpu": true,
       "showMem": true,
-      "showNet": true,
-      "showBattery": true,
-      "showDisk": true,
+      "showNet": false,
+      "showBattery": false,
+      "showDisk": false,
       "showGpu": true,
-      "compactBar": false,
+      "compactBar": true,
       "checkConnectivity": false,
       "interval": 2000,
       "alertBattery": 20,
@@ -66,22 +66,22 @@
         "key": "showNet",
         "type": "boolean",
         "label": "Show network",
-        "defaultValue": true,
-        "description": "Download/upload speeds in the bar label and history sparkline."
+        "defaultValue": false,
+        "description": "Download/upload speeds in the bar. Off by default so it does not duplicate the network icon."
       },
       {
         "key": "showBattery",
         "type": "boolean",
         "label": "Show battery",
-        "defaultValue": true,
-        "description": "Battery percent in the bar label. Hidden automatically when there is no battery."
+        "defaultValue": false,
+        "description": "Battery percent in the bar. Off by default; Omarchy already has a power widget."
       },
       {
         "key": "showDisk",
         "type": "boolean",
         "label": "Show disk",
-        "defaultValue": true,
-        "description": "Hottest filesystem percent in the bar label."
+        "defaultValue": false,
+        "description": "Root filesystem percent in the bar. Off by default to keep the widget narrow."
       },
       {
         "key": "showGpu",
@@ -94,8 +94,8 @@
         "key": "compactBar",
         "type": "boolean",
         "label": "Compact bar",
-        "defaultValue": false,
-        "description": "Drop CPU/MEM/BAT prefixes so the widget stays narrow."
+        "defaultValue": true,
+        "description": "Tighter spacing between bar segments. Names (CPU, MEM, …) always stay visible."
       },
       {
         "key": "checkConnectivity",

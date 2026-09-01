@@ -15,7 +15,7 @@ const fn = new Function(
     "parseStat, parseLoadavg, parseUptime, parseCpuinfo, parseScalingFreq," +
     "parseMeminfo, discoverDiskDevices, parseDiskstats," +
     "parseNetDev, parseV4DefaultIface, parseV6DefaultIface, netRates," +
-    "parseBattery, parseMilliC, parseGpuBusy, parseTop, parseDf, hottestDisk," +
+    "parseBattery, parseMilliC, parseGpuBusy, parseTop, parseDf, hottestDisk, rootDisk," +
     "parseDiscover, packetLoss" +
     "});"
 )
@@ -82,6 +82,7 @@ eq("parseDf count", df.length, 2)
 eq("parseDf prefers /", df[0].target, "/")
 eq("parseDf extra", df[1].target, "/boot")
 near("hottestDisk", api.hottestDisk(df), 10, 0.01)
+eq("rootDisk is /", api.rootDisk(df) && api.rootDisk(df).target, "/")
 
 const chargeBat = api.parseBattery(
   "POWER_SUPPLY_CAPACITY=40\nPOWER_SUPPLY_STATUS=Discharging\n" +

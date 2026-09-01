@@ -391,6 +391,16 @@ function hottestDisk(disks) {
   return max
 }
 
+function rootDisk(disks) {
+  if (!disks || disks.length === 0) return null
+  for (var i = 0; i < disks.length; i++)
+    if (disks[i].target === "/") return disks[i]
+  var minLarge = 8 * 1073741824
+  for (var j = 0; j < disks.length; j++)
+    if (disks[j].total >= minLarge) return disks[j]
+  return disks[0]
+}
+
 function parseDiscover(content) {
   var out = { cpu: "", nvme: "", gpu: "", bat: "" }
   var lines = String(content).trim().split("\n")

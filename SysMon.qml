@@ -35,6 +35,7 @@ BarWidget {
   property var prevDisk: null
   property var disks: []
   property real diskPercent: 0
+  property real diskHottest: 0
   property real diskUsedBytes: 0
   property real diskTotalBytes: 0
 
@@ -68,15 +69,22 @@ BarWidget {
   // ---- Top processes (sampled only while the panel is open)
   property var topProcs: []
 
-  // ---- Settings
-  readonly property bool showCpu: setting("showCpu", true)
-  readonly property bool showMem: setting("showMem", true)
-  readonly property bool showNet: setting("showNet", true)
-  readonly property bool showBattery: setting("showBattery", true)
-  readonly property bool showDisk: setting("showDisk", true)
-  readonly property bool showGpu: setting("showGpu", true)
-  readonly property bool compactBar: setting("compactBar", false)
-  readonly property bool checkConnectivity: setting("checkConnectivity", false)
+  // ---- Settings (CLI `omarchy bar set` stores booleans as strings)
+  function flag(key, fallback) {
+    var v = setting(key, fallback)
+    if (v === false || v === "false" || v === 0 || v === "0") return false
+    if (v === true || v === "true" || v === 1 || v === "1") return true
+    return fallback
+  }
+
+  readonly property bool showCpu: flag("showCpu", true)
+  readonly property bool showMem: flag("showMem", true)
+  readonly property bool showNet: flag("showNet", false)
+  readonly property bool showBattery: flag("showBattery", false)
+  readonly property bool showDisk: flag("showDisk", false)
+  readonly property bool showGpu: flag("showGpu", true)
+  readonly property bool compactBar: flag("compactBar", true)
+  readonly property bool checkConnectivity: flag("checkConnectivity", false)
   readonly property int sampleInterval: setting("interval", 2000)
   readonly property string detailCommand: setting("detailCommand", "omarchy-launch-floating-terminal-with-presentation btop")
   readonly property int alertBattery: setting("alertBattery", 20)
@@ -87,7 +95,7 @@ BarWidget {
   readonly property int alertTemp: setting("alertTemp", 85)
   readonly property int alertDisk: setting("alertDisk", 90)
   readonly property int alertMem: setting("alertMem", 95)
-  readonly property bool notifications: setting("notifications", false)
+  readonly property bool notifications: flag("notifications", false)
 
   // ---- History
   property var cpuHistory: []
@@ -107,20 +115,20 @@ BarWidget {
   property string hoveredSection: ""
 
   function cpuSegText() {
-    return compactBar ? (cpuPercent + "%") : ("CPU " + cpuPercent + "%")
+    return "CPU " + cpuPercent + "%"
   }
   function memSegText() {
-    return compactBar ? (Math.round(memPercent) + "%") : ("MEM " + Math.round(memPercent) + "%")
+    return "MEM " + Math.round(memPercent) + "%"
   }
   function gpuSegText() {
     var pct = gpuPercent < 0 ? 0 : Math.round(gpuPercent)
-    return compactBar ? ("G " + pct + "%") : ("GPU " + pct + "%")
+    return "GPU " + pct + "%"
   }
   function batSegText() {
-    return compactBar ? (batteryPercent + "%") : ("BAT " + batteryPercent + "%")
+    return "BAT " + batteryPercent + "%"
   }
   function diskSegText() {
-    return compactBar ? (Math.round(diskPercent) + "%") : ("DISK " + Math.round(diskPercent) + "%")
+    return "DISK " + Math.round(diskPercent) + "%"
   }
 
   readonly property var barSegments: {
@@ -140,7 +148,7 @@ BarWidget {
   readonly property bool batteryAlert: showBattery && batteryPresent && batteryStatus === "Discharging" && batteryPercent > 0 && batteryPercent <= alertBattery
   readonly property bool cpuAlert: cpuTempC >= alertTemp
   readonly property bool memAlert: showMem && memPercent >= alertMem
-  readonly property bool diskAlert: diskPercent >= alertDisk
+  readonly property bool diskAlert: diskHottest >= alertDisk
   readonly property bool alertActive: batteryAlert || cpuAlert || memAlert || diskAlert || netAlert
   property var activeAlerts: ({})
 
@@ -177,7 +185,7 @@ BarWidget {
       for (var d = 0; d < disks.length; d++) {
         if (disks[d].percent >= alertDisk) { name = disks[d].target; break }
       }
-      alerts.push(["disk", "Disk almost full: " + name + " " + Math.round(diskPercent) + "%"])
+      alerts.push(["disk", "Disk almost full: " + name + " " + Math.round(diskHottest) + "%"])
     }
 
     var next = {}
@@ -376,17 +384,12 @@ BarWidget {
       onStreamFinished: {
         var list = Model.parseDf(dfOut.text)
         root.disks = list
-        root.diskPercent = Model.hottestDisk(list)
-        for (var i = 0; i < list.length; i++) {
-          if (list[i].target === "/") {
-            root.diskUsedBytes = list[i].used
-            root.diskTotalBytes = list[i].total
-            break
-          }
-        }
-        if (list.length > 0 && root.diskTotalBytes <= 0) {
-          root.diskUsedBytes = list[0].used
-          root.diskTotalBytes = list[0].total
+        root.diskHottest = Model.hottestDisk(list)
+        var rootFs = Model.rootDisk(list)
+        if (rootFs) {
+          root.diskPercent = rootFs.percent
+          root.diskUsedBytes = rootFs.used
+          root.diskTotalBytes = rootFs.total
         }
       }
     }
@@ -516,14 +519,14 @@ BarWidget {
       id: labelsRow
       visible: !root.vertical
       anchors.centerIn: parent
-      spacing: Style.spaceReal(8)
+      spacing: root.compactBar ? Style.spaceReal(6) : Style.spaceReal(8)
       z: 2
 
       Canvas {
         id: miniSpark
         visible: root.showCpu && root.cpuHistory.length >= 2
-        width: visible ? 40 : 0
-        height: Math.max(12, button.fontSize)
+        width: visible ? 56 : 0
+        height: Math.max(16, button.fontSize + 4)
         antialiasing: true
         property int rev: root.historyVersion
         onRevChanged: requestPaint()
@@ -535,16 +538,23 @@ BarWidget {
           var data = root.cpuHistory
           if (!data || data.length < 2) return
           var n = data.length
+          var accent = Color.accent
+          var stroke = root.cpuAlert ? root.urgentCol : Style.selectedStateColor(button.foreground, accent)
           ctx.beginPath()
           for (var j = 0; j < n; j++) {
             var x = width * j / (n - 1)
-            var y = height - 1 - (height - 2) * Math.min(1, data[j] / 100)
+            var y = height - 1.5 - (height - 3) * Math.min(1, data[j] / 100)
             if (j === 0) ctx.moveTo(x, y)
             else ctx.lineTo(x, y)
           }
-          ctx.strokeStyle = root.cpuAlert ? root.urgentCol : button.foreground
-          ctx.lineWidth = 1.25
+          ctx.strokeStyle = stroke
+          ctx.lineWidth = 1.75
           ctx.stroke()
+          ctx.lineTo(width, height)
+          ctx.lineTo(0, height)
+          ctx.closePath()
+          ctx.fillStyle = Qt.rgba(accent.r, accent.g, accent.b, 0.4)
+          ctx.fill()
         }
         HoverHandler {
           onHoveredChanged: {

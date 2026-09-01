@@ -2,15 +2,15 @@
 
 An [iStat Menus](https://bjango.com/mac/istatmenus/)-style system monitor for the [Omarchy](https://omarchy.org/) bar.
 
-Live CPU, memory, disk, network, battery, GPU, and temperature in the status bar, plus a detail popup. Samples `/proc` and `/sys` every 2 seconds. No extra daemons. Ping is off unless you turn it on.
+Glanceable CPU and memory on the [Omarchy](https://omarchy.org/) bar, with a popup that names the process eating your machine. Samples `/proc` and `/sys` every 2 seconds. No extra daemons. Ping is off unless you turn it on.
 
-Plugin ID: `coding-sparrow.systempulse` · Version **1.2.0** · [MIT](LICENSE)
+Plugin ID: `coding-sparrow.systempulse` · Version **1.3.0** · [MIT](LICENSE)
 
-**On the bar** — CPU, memory, disk, network, and battery, next to the rest of the Omarchy tray:
+**On the bar** (default glance): CPU sparkline + CPU% + memory% — disk, network, and battery stay off so they do not fight stock Omarchy icons:
 
 ![System Pulse on the Omarchy bar](assets/bar.png)
 
-**Click the widget** (or a single segment) for the detail popup — cores, extra disks, processes, history, and toggles:
+**Click the widget** for CPU, memory, and top processes first. Disks, history, and extra bar segments are further down (or behind **Bar display**).
 
 ![System Pulse detail popup](assets/panel.png)
 
@@ -20,23 +20,23 @@ Marketplace: [omarchyplugins.com](https://omarchyplugins.com) (search **System P
 
 ## What you see on the bar
 
-A typical label:
+Default glance:
 
 ```
-▁▂▃  CPU 6%   MEM 30%   DISK 9%   ↓22k ↑1k   BAT 90%
+▁▂▃  CPU 6%   MEM 30%
 ```
 
-| Piece | Meaning |
-|--------|---------|
-| Mini sparkline | CPU over the last samples |
-| `CPU` | Total CPU busy % |
-| `MEM` | Used memory % (`MemTotal − MemAvailable`) |
-| `DISK` | Fullest real filesystem % |
-| `↓ ↑` | Download / upload on the default route |
-| `BAT` | Charge % (laptops; hidden on desktops) |
-| `GPU` | Busy % only if the kernel exposes `gpu_busy_percent` |
+| Piece | Default | Meaning |
+|--------|---------|---------|
+| Mini sparkline | on | CPU over recent samples (filled) |
+| CPU % | on | Total CPU busy |
+| Memory % | on | Used memory (`MemTotal − MemAvailable`) |
+| `DISK` | off | **Root** (`/`) filesystem % — not `/boot` |
+| `↓ ↑` | off | Download / upload (Omarchy already has a network icon) |
+| `BAT` | off | Charge % (Omarchy already has a power widget) |
+| `GPU` | auto | Only if sysfs has `gpu_busy_percent` |
 
-Segments you don't want can be toggled off. **Compact bar** drops the words: `6%  30%  9%  ↓22k ↑1k  90%`.
+Turn extra segments on under **Bar display** in the popup. Compact only tightens spacing — names stay on the bar so you can tell CPU from MEM.
 
 Failing resources turn **urgent** (theme urgent color) — only that segment, not the whole widget.
 
@@ -49,8 +49,10 @@ Hover the widget for a one-line tooltip (CPU, memory GB, network, battery state,
 | Action | What happens |
 |--------|----------------|
 | **Left-click the widget** | Open / close the detail popup |
-| **Left-click a segment** (`CPU`, `MEM`, `DISK`, `NET`, `BAT`) | Open the popup, highlight that block, scroll to it if the panel is tall |
-| **Right-click** | Open `btop` in a floating terminal (optional; needs `btop`) |
+| **Left-click a segment** | Open the popup, highlight that block, scroll to it if needed |
+| **Click a process** in the popup | Open `btop` in a floating terminal |
+| **Right-click** the widget | Same `btop` shortcut |
+| **Bar display ▸** | Extra segments (disk / net / battery), compact, ping, notifications |
 | **Click an alert toast** | Opens the popup (toasts are named “System Pulse” and won't sit on top of the widget forever) |
 
 Inside the popup:
@@ -137,11 +139,11 @@ All keys are optional.
 |-----|---------|----------------|
 | `showCpu` | `true` | CPU % + sparkline on the bar |
 | `showMem` | `true` | Memory % |
-| `showDisk` | `true` | Fullest filesystem % |
-| `showNet` | `true` | ↓/↑ on the default route |
-| `showBattery` | `true` | Battery % (auto-hides if there is no pack) |
+| `showDisk` | `false` | Root filesystem % |
+| `showNet` | `false` | ↓/↑ on the default route |
+| `showBattery` | `false` | Battery % (Omarchy already has a power widget) |
 | `showGpu` | `true` | GPU % when sysfs has `gpu_busy_percent` |
-| `compactBar` | `false` | Drop `CPU` / `MEM` / `DISK` / `BAT` prefixes |
+| `compactBar` | `true` | Drop `CPU` / `MEM` prefixes |
 | `checkConnectivity` | `false` | Periodic ping for packet-loss alerts (off = no extra network) |
 | `interval` | `2000` | Sample period in ms (500–10000) |
 | `alertBattery` | `20` | Urgent while discharging at or below this % |

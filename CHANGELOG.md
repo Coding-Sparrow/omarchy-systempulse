@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0
+
+- Glance defaults: compact CPU sparkline + CPU% + memory% only. Disk, network, and battery are off on the bar so they do not duplicate stock Omarchy icons.
+- Readable filled CPU sparkline on the bar.
+- Bar disk % is the root filesystem (`/`), not a tiny `/boot` volume. Alerts still watch every mount.
+- Popup leads with CPU, memory, and top processes. Click a process to open `btop`. History and extra stats follow. **Bar display** is collapsed until you open it.
+
 ## 1.2.0
 
 - Bar: CPU mini-sparkline and a `DISK` segment; click a segment to open that block in the popup (accent highlight).
