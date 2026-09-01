@@ -1,36 +1,72 @@
-# System Pulse — an iStat-style system monitor for Omarchy
+# System Pulse
 
-An iStat Menus-style system monitor for the [Omarchy](https://omarchy.org/) bar. Live CPU, memory, disk, network, battery, GPU, and temperature readings in the status bar, with a detail popup — sampled from `/proc` and `/sys`.
+An [iStat Menus](https://bjango.com/mac/istatmenus/)-style system monitor for the [Omarchy](https://omarchy.org/) bar.
 
-![Bar](assets/bar.png)
-![Detail panel](assets/panel.png)
+Live CPU, memory, disk, network, battery, GPU, and temperature in the status bar, plus a detail popup. Samples `/proc` and `/sys` every 2 seconds. No extra daemons. Ping is off unless you turn it on.
 
-## Features
+Plugin ID: `coding-sparrow.systempulse` · Version **1.2.0** · [MIT](LICENSE)
 
-- **Bar label** — compact, iStat-style: `CPU 6%   MEM 30%   ↓22k ↑1k   BAT 90%` (each segment toggleable; compact mode drops the prefixes). Click a segment to open that section in the popup.
-- **Detail popup** (click the bar label):
-  - **CPU** — usage hero, load averages, frequency, package temperature, per-core mini-bars, uptime
-  - **Processes** — top 5 by CPU while the popup is open
-  - **History** — live sparklines for CPU, memory, network and battery, labeled with the real time window
-  - **Memory** — used/total, cached, swap
-  - **Disk** — each real filesystem (not bind mounts of the same device), live read/write speeds, NVMe temperature
-  - **Network** — default interface (IPv4 or IPv6), ↓/↑ speeds, totals since boot, local IP
-  - **Battery** — charge, state, power draw, health vs design capacity, cycle count, time remaining (`ENERGY_*` and `CHARGE_*` packs)
-  - **GPU** — busy percent when the kernel exposes it
-  - **Bar display** — toggle bar segments, compact mode, optional ping check, and alert notifications right in the popup
-- **Alerts** — only the failing segment turns urgent: low battery, hot CPU, high memory, full disk — optional ping-based network alert; optional desktop notifications fire once per alert and open the panel on click
-- **Right-click** — opens `btop` in a floating terminal for the deep dive
-- **Vertical bar aware**, theme-aware (follows your Omarchy theme colors)
-- Hover tooltip with an exact summary
+**On the bar** — CPU, memory, disk, network, and battery, next to the rest of the Omarchy tray:
 
-Everything updates every 2 seconds via kernel interfaces (`/proc/stat`, `/proc/meminfo`, `/proc/diskstats`, `/proc/net/dev`, `/sys/class/power_supply`, `/sys/class/hwmon`). No polling daemons. Connectivity ping is off unless you enable it.
+![System Pulse on the Omarchy bar](assets/bar.png)
 
-## Requirements
+**Click the widget** (or a single segment) for the detail popup — cores, extra disks, processes, history, and toggles:
 
-- Omarchy (with the Omarchy shell / Quickshell bar)
-- `btop` (optional — only for the right-click detail view)
+![System Pulse detail popup](assets/panel.png)
 
-Battery, temperature, GPU, and network sections appear automatically when the hardware exposes them.
+Marketplace: [omarchyplugins.com](https://omarchyplugins.com) (search **System Pulse**).
+
+---
+
+## What you see on the bar
+
+A typical label:
+
+```
+▁▂▃  CPU 6%   MEM 30%   DISK 9%   ↓22k ↑1k   BAT 90%
+```
+
+| Piece | Meaning |
+|--------|---------|
+| Mini sparkline | CPU over the last samples |
+| `CPU` | Total CPU busy % |
+| `MEM` | Used memory % (`MemTotal − MemAvailable`) |
+| `DISK` | Fullest real filesystem % |
+| `↓ ↑` | Download / upload on the default route |
+| `BAT` | Charge % (laptops; hidden on desktops) |
+| `GPU` | Busy % only if the kernel exposes `gpu_busy_percent` |
+
+Segments you don't want can be toggled off. **Compact bar** drops the words: `6%  30%  9%  ↓22k ↑1k  90%`.
+
+Failing resources turn **urgent** (theme urgent color) — only that segment, not the whole widget.
+
+Hover the widget for a one-line tooltip (CPU, memory GB, network, battery state, package temp).
+
+---
+
+## How to use it
+
+| Action | What happens |
+|--------|----------------|
+| **Left-click the widget** | Open / close the detail popup |
+| **Left-click a segment** (`CPU`, `MEM`, `DISK`, `NET`, `BAT`) | Open the popup, highlight that block, scroll to it if the panel is tall |
+| **Right-click** | Open `btop` in a floating terminal (optional; needs `btop`) |
+| **Click an alert toast** | Opens the popup (toasts are named “System Pulse” and won't sit on top of the widget forever) |
+
+Inside the popup:
+
+1. **CPU** — big %, load averages, frequency, package °C, GPU % if present, per-core bars (any core count), uptime
+2. **Memory** — used / total, cached, swap
+3. **Disk** — each real filesystem (e.g. `/` and `/boot`; bind mounts of the same device are merged), read/write speed, NVMe °C
+4. **Network** — default iface (IPv4, else IPv6), live ↓/↑, totals since boot, local IP
+5. **Battery** — %, status, watts, health vs design, cycles, time remaining
+6. **Processes** — top 5 by CPU, sampled only while the popup is open
+7. **History** — sparklines for CPU, memory, network, battery, with `… ago` → `now` (fills up to ~4 minutes at the default interval)
+8. **Bar display** — toggles that persist to `shell.json`
+
+Vertical bars stack the same segments and still color alerts.
+
+---
 
 ## Install
 
@@ -38,72 +74,158 @@ Battery, temperature, GPU, and network sections appear automatically when the ha
 omarchy plugin add https://github.com/Coding-Sparrow/omarchy-systempulse.git --enable
 ```
 
-## Remove
+Place it on the bar if the installer didn't:
 
 ```bash
-omarchy plugin disable coding-sparrow.systempulse   # hide it from the bar
-omarchy plugin remove coding-sparrow.systempulse    # delete it entirely
+omarchy plugin enable coding-sparrow.systempulse --section right
 ```
 
-## Settings
-
-Easiest first: **click the bar widget** and use the toggles in the popup's "Bar display" section — they persist automatically.
-
-You can also use the Omarchy CLI (no JSON editing needed):
+### Update
 
 ```bash
-omarchy bar set coding-sparrow.systempulse showNet false
+omarchy plugin update coding-sparrow.systempulse
+```
+
+### Hide or remove
+
+```bash
+omarchy plugin disable coding-sparrow.systempulse   # leave files, hide from the bar
+omarchy plugin remove coding-sparrow.systempulse    # delete the checkout
+```
+
+### Requirements
+
+- Omarchy with the Omarchy shell / Quickshell bar (4.x)
+- `btop` — optional, only for right-click
+
+No other packages. GPU, battery, NVMe temp, and fans-of-sensors appear only when the kernel exposes them.
+
+---
+
+## Configure
+
+**Easiest:** click the widget → **Bar display** at the bottom. Toggles save themselves.
+
+Or CLI (no JSON editing):
+
+```bash
 omarchy bar set coding-sparrow.systempulse compactBar true
-omarchy bar set coding-sparrow.systempulse alertTemp 80
+omarchy bar set coding-sparrow.systempulse showNet false
+omarchy bar set coding-sparrow.systempulse showDisk false
 omarchy bar set coding-sparrow.systempulse notifications true
+omarchy bar set coding-sparrow.systempulse alertTemp 80
 omarchy bar set coding-sparrow.systempulse interval 1000
 omarchy bar set coding-sparrow.systempulse checkConnectivity true
 ```
 
-Full list of keys (all optional — defaults shown):
-
-| Key | Default | Purpose |
-|-----|---------|---------|
-| `showCpu` | `true` | CPU segment in the bar label and history |
-| `showMem` | `true` | Memory segment and history |
-| `showNet` | `true` | Network segment and history |
-| `showBattery` | `true` | Battery segment and history (auto-hides without a battery) |
-| `showGpu` | `true` | GPU segment when `gpu_busy_percent` exists |
-| `compactBar` | `false` | Drop CPU/MEM/BAT prefixes |
-| `checkConnectivity` | `false` | Periodic ping probe for packet-loss alerts |
-| `interval` | `2000` | Sample interval in milliseconds (500–10000) |
-| `alertBattery` | `20` | Turn the label urgent when the battery (discharging) falls below this % |
-| `alertTemp` | `85` | Turn the label urgent when the CPU package exceeds this °C |
-| `alertDisk` | `90` | Turn the label urgent when the root disk exceeds this % |
-| `alertMem` | `95` | Turn the label urgent when used memory exceeds this % |
-| `notifications` | `false` | Fire a desktop notification once as each alert triggers |
-| `pingInterval` | `10000` | Connectivity probe interval in milliseconds (only if ping check is on) |
-| `netAlertFailures` | `3` | Consecutive failed probes before the network segment turns red |
-| `detailCommand` | `btop` floating terminal | Command run on right-click |
-
-Every key can also be set in the widget's entry in `~/.config/omarchy/shell.json`:
+Or in `~/.config/omarchy/shell.json` on the widget entry:
 
 ```json
-{ "id": "coding-sparrow.systempulse", "showNet": false, "compactBar": true, "notifications": true }
+{
+  "id": "coding-sparrow.systempulse",
+  "compactBar": true,
+  "showNet": false,
+  "notifications": true
+}
 ```
+
+### Settings
+
+All keys are optional.
+
+| Key | Default | What it does |
+|-----|---------|----------------|
+| `showCpu` | `true` | CPU % + sparkline on the bar |
+| `showMem` | `true` | Memory % |
+| `showDisk` | `true` | Fullest filesystem % |
+| `showNet` | `true` | ↓/↑ on the default route |
+| `showBattery` | `true` | Battery % (auto-hides if there is no pack) |
+| `showGpu` | `true` | GPU % when sysfs has `gpu_busy_percent` |
+| `compactBar` | `false` | Drop `CPU` / `MEM` / `DISK` / `BAT` prefixes |
+| `checkConnectivity` | `false` | Periodic ping for packet-loss alerts (off = no extra network) |
+| `interval` | `2000` | Sample period in ms (500–10000) |
+| `alertBattery` | `20` | Urgent while discharging at or below this % |
+| `alertTemp` | `85` | Urgent when CPU package °C is at or above this |
+| `alertMem` | `95` | Urgent when used memory % is at or above this |
+| `alertDisk` | `90` | Urgent when any listed filesystem is this full |
+| `notifications` | `false` | One desktop notification per alert as it starts; click opens the popup |
+| `pingInterval` | `10000` | Ping period in ms (only if ping check is on) |
+| `netAlertFailures` | `3` | Failed pings in a row before the network segment turns red |
+| `detailCommand` | floating `btop` | Command run on right-click |
+
+---
+
+## Alerts
+
+| Condition | Bar |
+|-----------|-----|
+| Battery discharging ≤ `alertBattery` | `BAT` urgent |
+| CPU package ≥ `alertTemp` | `CPU` urgent |
+| Memory ≥ `alertMem` | `MEM` urgent |
+| Any disk ≥ `alertDisk` | `DISK` urgent; notification names the mount |
+| Ping check on, and N failed probes | network segment urgent |
+
+Notifications fire **once** when an alert starts, not every sample. Clicking the toast opens the panel and dismisses System Pulse toasts so they cannot cover the widget.
+
+---
+
+## Hardware notes
+
+Works without extra setup on typical Omarchy laptops and desktops.
+
+- **CPU temp:** Intel `coretemp` (Package id), AMD `k10temp` / `zenpower` (Tctl/Tdie), ARM `cpu` / `soc_thermal`, then `acpitz`
+- **CPU frequency:** `/proc/cpuinfo` MHz, or `cpufreq/scaling_cur_freq` (ARM)
+- **Battery:** `ENERGY_*` or `CHARGE_*` sysfs (health, watts, time left)
+- **Network:** IPv4 default route first, IPv6 if that's all there is
+- **GPU:** shown only if `/sys/class/drm/card*/device/gpu_busy_percent` exists (common on AMD; often missing on Intel)
+- **Disks:** unique block devices, tmpfs/overlay skipped; `/` preferred over `/home` when they are the same volume
+
+---
 
 ## How it works
 
-The widget is a standard Omarchy shell plugin (Quickshell/QML):
+Omarchy shell plugin (Quickshell / QML):
 
-- `SysMon.qml` — bar widget, FileViews, timers.
-- `Model.js` — parsing and formatting (`/proc`, `/sys`, `df`, `ps`).
-- `Panel.qml` — detail popup built on the shell's own `Panel`/`KeyboardPanel` infrastructure, bound live to the sampler.
-- Device discovery (CPU/NVMe temperature paths, battery path, GPU busy path) happens once at startup via `/sys/class/hwmon`, `/sys/class/power_supply`, and `/sys/class/drm`.
+| File | Role |
+|------|------|
+| `SysMon.qml` | Bar widget, FileViews, timers, IPC |
+| `Panel.qml` | Detail popup (`Panel` / `KeyboardPanel`) |
+| `Sparklines.qml` | History graphs |
+| `Model.js` | Parsing and formatting (`/proc`, `/sys`, `df`, `ps`) |
 
-No config files are read or written outside the plugin's own settings in `shell.json`.
+Reads kernel interfaces on a timer (`/proc/stat`, `/proc/meminfo`, `/proc/diskstats`, `/proc/net/dev`, `/proc/net/route`, `/proc/net/ipv6_route`, `/sys/class/power_supply`, `/sys/class/hwmon`). Discovery of temp/battery/GPU paths runs once at startup.
 
-## Tests
+Does **not** write anything except its own keys in `shell.json`. Ping to `1.1.1.1` runs only if **Ping check** is on.
+
+IPC (optional):
 
 ```bash
+omarchy-shell coding-sparrow.systempulse open
+omarchy-shell coding-sparrow.systempulse close
+omarchy-shell coding-sparrow.systempulse toggle
+omarchy-shell coding-sparrow.systempulse refresh
+```
+
+---
+
+## Develop
+
+```bash
+git clone https://github.com/Coding-Sparrow/omarchy-systempulse.git
+omarchy plugin validate ./omarchy-systempulse
 node test/model-test.js
 ```
 
+Installed copy (hot-reloads on save):
+
+`~/.config/omarchy/plugins/coding-sparrow.systempulse/`
+
+If a change doesn't apply: `omarchy-shell shell rescanPlugins` or `omarchy restart shell`.
+
+See [CHANGELOG.md](CHANGELOG.md) for 1.2.0 / 1.1.0 notes.
+
+---
+
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © Coding-Sparrow
