@@ -210,15 +210,16 @@ omarchy-shell coding-sparrow.systempulse refresh
 
 ## Develop
 
-```bash
-git clone https://github.com/Coding-Sparrow/omarchy-systempulse.git
-omarchy plugin validate ./omarchy-systempulse
-node test/model-test.js
-```
-
-Installed copy (hot-reloads on save):
+After install, the checkout Omarchy already cloned is:
 
 `~/.config/omarchy/plugins/coding-sparrow.systempulse/`
+
+Edits there hot-reload. Validate and test from that directory:
+
+```bash
+omarchy plugin validate .
+node test/model-test.js
+```
 
 If a change doesn't apply: `omarchy-shell shell rescanPlugins` or `omarchy restart shell`.
 
