@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "coding-sparrow.systempulse",
   "name": "System Pulse",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "author": "Coding-Sparrow",
-  "description": "Live CPU, memory, network and battery readings in the bar, iStat-style.",
+  "description": "Live CPU, memory, GPU, network and battery readings in the bar, iStat-style.",
   "kinds": [
     "bar-widget"
   ],
@@ -13,8 +13,20 @@
   },
   "barWidget": {
     "displayName": "System Pulse",
-    "description": "Live CPU, memory, network and battery readings in the bar, iStat-style.",
+    "description": "Live CPU, memory, GPU, network and battery readings in the bar, iStat-style.",
     "category": "System",
+    "aliases": [
+      "cpu",
+      "memory",
+      "ram",
+      "sysmon",
+      "istat",
+      "htop",
+      "btop",
+      "monitor",
+      "temperature",
+      "battery"
+    ],
     "defaultSection": "right",
     "allowMultiple": false,
     "defaults": {
@@ -22,10 +34,15 @@
       "showMem": true,
       "showNet": true,
       "showBattery": true,
+      "showDisk": true,
+      "showGpu": true,
+      "compactBar": false,
+      "checkConnectivity": false,
       "interval": 2000,
       "alertBattery": 20,
       "alertTemp": 85,
       "alertDisk": 90,
+      "alertMem": 95,
       "notifications": false,
       "pingInterval": 10000,
       "netAlertFailures": 3
@@ -35,25 +52,57 @@
         "key": "showCpu",
         "type": "boolean",
         "label": "Show CPU",
-        "defaultValue": true
+        "defaultValue": true,
+        "description": "CPU percent in the bar label and history sparkline."
       },
       {
         "key": "showMem",
         "type": "boolean",
         "label": "Show memory",
-        "defaultValue": true
+        "defaultValue": true,
+        "description": "Memory percent in the bar label and history sparkline."
       },
       {
         "key": "showNet",
         "type": "boolean",
         "label": "Show network",
-        "defaultValue": true
+        "defaultValue": true,
+        "description": "Download/upload speeds in the bar label and history sparkline."
       },
       {
         "key": "showBattery",
         "type": "boolean",
         "label": "Show battery",
-        "defaultValue": true
+        "defaultValue": true,
+        "description": "Battery percent in the bar label. Hidden automatically when there is no battery."
+      },
+      {
+        "key": "showDisk",
+        "type": "boolean",
+        "label": "Show disk",
+        "defaultValue": true,
+        "description": "Hottest filesystem percent in the bar label."
+      },
+      {
+        "key": "showGpu",
+        "type": "boolean",
+        "label": "Show GPU",
+        "defaultValue": true,
+        "description": "GPU busy percent in the bar, when the kernel exposes gpu_busy_percent (AMD/some NVIDIA)."
+      },
+      {
+        "key": "compactBar",
+        "type": "boolean",
+        "label": "Compact bar",
+        "defaultValue": false,
+        "description": "Drop CPU/MEM/BAT prefixes so the widget stays narrow."
+      },
+      {
+        "key": "checkConnectivity",
+        "type": "boolean",
+        "label": "Ping check",
+        "defaultValue": false,
+        "description": "Periodically ping to detect packet loss. Off by default so the widget never phones home."
       },
       {
         "key": "interval",
@@ -62,7 +111,8 @@
         "min": 500,
         "max": 10000,
         "step": 500,
-        "defaultValue": 2000
+        "defaultValue": 2000,
+        "description": "How often /proc and /sys are reread."
       },
       {
         "key": "alertBattery",
@@ -71,7 +121,8 @@
         "min": 0,
         "max": 100,
         "step": 5,
-        "defaultValue": 20
+        "defaultValue": 20,
+        "description": "Turn the battery segment urgent while discharging below this percent."
       },
       {
         "key": "alertTemp",
@@ -80,7 +131,8 @@
         "min": 40,
         "max": 110,
         "step": 5,
-        "defaultValue": 85
+        "defaultValue": 85,
+        "description": "Turn the CPU segment urgent when package temperature exceeds this."
       },
       {
         "key": "alertDisk",
@@ -89,13 +141,25 @@
         "min": 50,
         "max": 100,
         "step": 5,
-        "defaultValue": 90
+        "defaultValue": 90,
+        "description": "Turn urgent when the root filesystem is this full."
+      },
+      {
+        "key": "alertMem",
+        "type": "integer",
+        "label": "Memory alert above (%)",
+        "min": 50,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 95,
+        "description": "Turn the memory segment urgent when used memory exceeds this percent."
       },
       {
         "key": "notifications",
         "type": "boolean",
         "label": "Desktop notifications on alerts",
-        "defaultValue": false
+        "defaultValue": false,
+        "description": "Fire a desktop notification once as each alert triggers. Clicking it opens the panel."
       },
       {
         "key": "pingInterval",
@@ -104,7 +168,8 @@
         "min": 5000,
         "max": 60000,
         "step": 5000,
-        "defaultValue": 10000
+        "defaultValue": 10000,
+        "description": "Only used when Ping check is on."
       },
       {
         "key": "netAlertFailures",
@@ -113,7 +178,8 @@
         "min": 1,
         "max": 10,
         "step": 1,
-        "defaultValue": 3
+        "defaultValue": 3,
+        "description": "Consecutive failed probes before the network segment turns red. Only used when Ping check is on."
       }
     ]
   }

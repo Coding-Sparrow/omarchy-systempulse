@@ -27,8 +27,13 @@ Item {
   onFgChanged: repaintAll()
   Component.onCompleted: repaintAll()
 
-  implicitHeight: col.implicitHeight
-  implicitWidth: col.implicitWidth
+  implicitHeight: wrap.implicitHeight
+  implicitWidth: wrap.implicitWidth
+
+  Column {
+    id: wrap
+    width: parent.width
+    spacing: Style.space(4)
 
   Grid {
     id: col
@@ -282,6 +287,34 @@ Item {
           ctx.fill()
         }
         onWidthChanged: requestPaint()
+      }
+    }
+  }
+
+    Item {
+      width: parent.width
+      height: agoLabel.implicitHeight
+
+      Text {
+        id: agoLabel
+        anchors.left: parent.left
+        text: {
+          if (!root.hw || !root.hw.historySpan) return ""
+          var s = String(root.hw.historySpan)
+          if (s.indexOf("filling") === 0) return s
+          return s.replace(/^last /, "") + " ago"
+        }
+        color: root.dimCol
+        font.family: root.fam
+        font.pixelSize: Style.font.caption
+      }
+
+      Text {
+        anchors.right: parent.right
+        text: root.hw && root.hw.cpuHistory && root.hw.cpuHistory.length >= 2 ? "now" : ""
+        color: root.dimCol
+        font.family: root.fam
+        font.pixelSize: Style.font.caption
       }
     }
   }

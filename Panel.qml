@@ -22,6 +22,48 @@ Panel {
   readonly property real colWidth: (contentCol.width - Style.space(14)) / 2
 
   property string localIp: ""
+  property string focusSection: ""
+
+  function revealSection(id) {
+    focusSection = id || ""
+    if (id) highlightTimer.restart()
+    else highlightTimer.stop()
+    Qt.callLater(function() { root.scrollToSection(id) })
+  }
+
+  function sectionItem(id) {
+    if (id === "cpu") return cpuBox
+    if (id === "mem" || id === "disk") return memBox
+    if (id === "net") return netCol
+    if (id === "battery") return batCol
+    return null
+  }
+
+  function scrollToSection(id) {
+    if (!id || !flick) return
+    var item = sectionItem(id)
+    if (!item) return
+    var y = item.mapToItem(contentCol, 0, 0).y
+    var maxY = Math.max(0, flick.contentHeight - flick.height)
+    flick.contentY = Math.max(0, Math.min(y - Style.space(8), maxY))
+  }
+
+  function headingColor(id) {
+    if (focusSection === id) return Style.selectedStateColor(root.fg, Color.accent)
+    return root.dim
+  }
+
+  function headingText(id, label) {
+    return focusSection === id ? "\u25B6  " + label : label
+  }
+
+  readonly property color focusFill: Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.14)
+
+  Timer {
+    id: highlightTimer
+    interval: 2800
+    onTriggered: root.focusSection = ""
+  }
 
   function open() {
     root.controller.show()
@@ -38,6 +80,11 @@ Panel {
   }
 
   function refreshOnce() {
+    var dev = root.hw && root.hw.netIface ? String(root.hw.netIface).replace(/[^A-Za-z0-9._-]/g, "") : ""
+    var script = dev !== ""
+      ? "ip -4 -o addr show dev " + dev + " scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1"
+      : "hostname -I 2>/dev/null | awk '{print $1}'"
+    ipProc.command = ["bash", "-c", script]
     ipProc.running = true
   }
 
@@ -77,7 +124,6 @@ Panel {
 
   Process {
     id: ipProc
-    command: ["bash", "-c", "hostname -I 2>/dev/null | awk '{print $1}'"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
@@ -103,9 +149,19 @@ Panel {
       onCloseRequested: root.close()
     }
 
+    Flickable {
+      id: flick
+      anchors.fill: parent
+      clip: true
+      boundsBehavior: Flickable.StopAtBounds
+      contentWidth: width
+      contentHeight: contentCol.implicitHeight
+      interactive: contentHeight > height + 1
+      flickableDirection: Flickable.VerticalFlick
+
     Column {
       id: contentCol
-      width: parent.width
+      width: flick.width
       spacing: Style.space(12)
 
       // ================================================== TOP ROW: CPU | MEMORY + DISK
@@ -113,13 +169,29 @@ Panel {
         width: parent.width
         spacing: Style.space(14)
 
-        Column {
+        Item {
+          id: cpuBox
           width: root.colWidth
+          implicitHeight: cpuCol.implicitHeight
+
+          Rectangle {
+            anchors.fill: parent
+            anchors.margins: -Style.space(6)
+            visible: root.focusSection === "cpu"
+            color: root.focusFill
+            border.color: Style.selectedStateColor(root.fg, Color.accent)
+            border.width: 1
+            radius: 8
+          }
+
+        Column {
+          id: cpuCol
+          width: parent.width
           spacing: Style.space(8)
 
           Text {
-            text: "CPU"
-            color: root.dim
+            text: root.headingText("cpu", "CPU")
+            color: root.headingColor("cpu")
             font.family: root.fam
             font.pixelSize: Style.font.caption
             font.letterSpacing: 1
@@ -150,8 +222,14 @@ Panel {
               }
 
               Text {
-                text: root.hw ? ((root.hw.freqGhz > 0 ? root.hw.freqGhz.toFixed(2) + " GHz" : "") +
-                  (root.hw.cpuTempC > 0 ? "  ·  " + Math.round(root.hw.cpuTempC) + "\u00B0C" : "")) : "—"
+                text: {
+                  if (!root.hw) return "—"
+                  var bits = []
+                  if (root.hw.freqGhz > 0) bits.push(root.hw.freqGhz.toFixed(2) + " GHz")
+                  if (root.hw.cpuTempC > 0) bits.push(Math.round(root.hw.cpuTempC) + "\u00B0C")
+                  if (root.hw.gpuPercent >= 0) bits.push("GPU " + Math.round(root.hw.gpuPercent) + "%")
+                  return bits.length > 0 ? bits.join("  ·  ") : "—"
+                }
                 color: root.fg
                 font.family: root.fam
                 font.pixelSize: Style.font.bodySmall
@@ -160,13 +238,19 @@ Panel {
           }
 
           Row {
+            id: coreRow
+            width: parent.width
             spacing: Style.space(3)
             Repeater {
               model: root.hw ? root.hw.cores : []
 
               Item {
                 required property var modelData
-                width: Math.max(4, (parent.width - 21 * 3) / 22)
+                width: {
+                  var n = root.hw && root.hw.cores ? root.hw.cores.length : 1
+                  var gaps = Math.max(0, n - 1) * coreRow.spacing
+                  return Math.max(3, (coreRow.width - gaps) / n)
+                }
                 height: Style.space(24)
 
                 Rectangle {
@@ -200,14 +284,31 @@ Panel {
             font.pixelSize: Style.font.bodySmall
           }
         }
+        }
+
+        Item {
+          id: memBox
+          width: root.colWidth
+          implicitHeight: memCol.implicitHeight
+
+          Rectangle {
+            anchors.fill: parent
+            anchors.margins: -Style.space(6)
+            visible: root.focusSection === "mem" || root.focusSection === "disk"
+            color: root.focusFill
+            border.color: Style.selectedStateColor(root.fg, Color.accent)
+            border.width: 1
+            radius: 8
+          }
 
         Column {
-          width: root.colWidth
+          id: memCol
+          width: parent.width
           spacing: Style.space(6)
 
           Text {
-            text: "MEMORY"
-            color: root.dim
+            text: root.headingText("mem", "MEMORY")
+            color: root.headingColor("mem")
             font.family: root.fam
             font.pixelSize: Style.font.caption
             font.letterSpacing: 1
@@ -264,35 +365,61 @@ Panel {
           }
 
           Text {
-            text: "DISK"
-            color: root.dim
+            text: root.headingText("disk", "DISK")
+            color: root.headingColor("disk")
             font.family: root.fam
             font.pixelSize: Style.font.caption
             font.letterSpacing: 1
             font.bold: true
           }
 
-          Text {
-            text: root.hw ? ("Root  " + (root.hw.diskTotalBytes > 0 ? (root.hw.diskUsedBytes / 1073741824).toFixed(0) + " / " + (root.hw.diskTotalBytes / 1073741824).toFixed(0) + " GB (" + Math.round(root.hw.diskPercent) + "%)" : "—")) : ""
-            color: root.fg
-            font.family: root.fam
-            font.pixelSize: Style.font.bodySmall
-          }
+          Repeater {
+            model: root.hw && root.hw.disks && root.hw.disks.length > 0 ? root.hw.disks : []
 
-          Rectangle {
-            width: parent.width
-            height: Style.space(6)
-            radius: Style.cornerRadius > 0 ? height / 2 : 0
-            color: root.track
-            visible: root.hw && root.hw.diskTotalBytes > 0
+            Column {
+              required property var modelData
+              width: parent.width
+              spacing: Style.space(2)
 
-            Rectangle {
-              width: Math.round(parent.width * (root.hw && root.hw.diskTotalBytes > 0 ? root.hw.diskUsedBytes / root.hw.diskTotalBytes : 0))
-              height: parent.height
-              radius: parent.radius
-              color: Style.selectedStateColor(root.fg, Color.accent)
+              Item {
+                width: parent.width
+                height: diskLabel.implicitHeight
 
-              Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                Text {
+                  id: diskLabel
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: modelData.target
+                  color: root.dim
+                  font.family: root.fam
+                  font.pixelSize: Style.font.bodySmall
+                }
+
+                Text {
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: (modelData.used / 1073741824).toFixed(modelData.total > 10737418240 ? 0 : 1) + " / " +
+                        (modelData.total / 1073741824).toFixed(modelData.total > 10737418240 ? 0 : 1) + " GB (" +
+                        Math.round(modelData.percent) + "%)"
+                  color: modelData.percent >= (root.hw ? root.hw.alertDisk : 90) ? (root.bar ? root.bar.urgent : Color.urgent) : root.fg
+                  font.family: root.fam
+                  font.pixelSize: Style.font.bodySmall
+                }
+              }
+
+              Rectangle {
+                width: parent.width
+                height: Style.space(6)
+                radius: Style.cornerRadius > 0 ? height / 2 : 0
+                color: root.track
+
+                Rectangle {
+                  width: Math.round(parent.width * Math.min(1, modelData.percent / 100))
+                  height: parent.height
+                  radius: parent.radius
+                  color: Style.selectedStateColor(root.fg, Color.accent)
+                }
+              }
             }
           }
 
@@ -306,6 +433,7 @@ Panel {
             width: parent.width
           }
         }
+        }
       }
 
       // ================================================== MID ROW: NETWORK | BATTERY
@@ -315,13 +443,14 @@ Panel {
         visible: (root.hw && root.hw.netIface !== "") || (root.hw && root.hw.batteryPresent)
 
         Column {
+          id: netCol
           width: root.colWidth
           spacing: Style.space(6)
           visible: root.hw && root.hw.netIface !== ""
 
           Text {
-            text: "NETWORK"
-            color: root.dim
+            text: root.headingText("net", "NETWORK")
+            color: root.headingColor("net")
             font.family: root.fam
             font.pixelSize: Style.font.caption
             font.letterSpacing: 1
@@ -347,13 +476,14 @@ Panel {
         }
 
         Column {
+          id: batCol
           width: root.colWidth
           spacing: Style.space(6)
           visible: root.hw && root.hw.batteryPresent
 
           Text {
-            text: "BATTERY"
-            color: root.dim
+            text: root.headingText("battery", "BATTERY")
+            color: root.headingColor("battery")
             font.family: root.fam
             font.pixelSize: Style.font.caption
             font.letterSpacing: 1
@@ -391,18 +521,83 @@ Panel {
         }
       }
 
+      // ================================================== PROCESSES
+      Column {
+        width: parent.width
+        spacing: Style.space(6)
+        visible: root.hw && root.hw.topProcs && root.hw.topProcs.length > 0
+
+        Text {
+          text: "PROCESSES"
+          color: root.headingColor("cpu")
+          font.family: root.fam
+          font.pixelSize: Style.font.caption
+          font.letterSpacing: 1
+          font.bold: true
+        }
+
+        Repeater {
+          model: root.hw ? root.hw.topProcs : []
+
+          Item {
+            required property var modelData
+            width: contentCol.width
+            height: procName.implicitHeight
+
+            Text {
+              id: procName
+              anchors.left: parent.left
+              anchors.right: procStats.left
+              anchors.rightMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              text: modelData.name
+              elide: Text.ElideRight
+              color: root.fg
+              font.family: root.fam
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            Text {
+              id: procStats
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              text: modelData.cpu.toFixed(1) + "% cpu   " + modelData.mem.toFixed(1) + "% mem"
+              color: root.dim
+              font.family: root.fam
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+        }
+      }
+
       // ================================================== HISTORY
       Column {
         width: parent.width
         spacing: Style.space(8)
 
-        Text {
-          text: "HISTORY"
-          color: root.dim
-          font.family: root.fam
-          font.pixelSize: Style.font.caption
-          font.letterSpacing: 1
-          font.bold: true
+        Item {
+          width: parent.width
+          height: histTitle.implicitHeight
+
+          Text {
+            id: histTitle
+            anchors.left: parent.left
+            text: "HISTORY"
+            color: root.dim
+            font.family: root.fam
+            font.pixelSize: Style.font.caption
+            font.letterSpacing: 1
+            font.bold: true
+          }
+
+          Text {
+            anchors.right: parent.right
+            anchors.baseline: histTitle.baseline
+            text: root.hw && root.hw.historySpan ? root.hw.historySpan : ""
+            color: root.dim
+            font.family: root.fam
+            font.pixelSize: Style.font.bodySmall
+          }
         }
 
         Loader {
@@ -441,11 +636,15 @@ Panel {
 
           Repeater {
             model: [
-              { key: "showCpu", label: "CPU" },
-              { key: "showMem", label: "Memory" },
-              { key: "showNet", label: "Network" },
-              { key: "showBattery", label: "Battery" },
-              { key: "notifications", label: "Alert notifications" }
+              { key: "showCpu", label: "CPU", fallback: true },
+              { key: "showMem", label: "Memory", fallback: true },
+              { key: "showNet", label: "Network", fallback: true },
+              { key: "showBattery", label: "Battery", fallback: true },
+              { key: "showDisk", label: "Disk", fallback: true },
+              { key: "showGpu", label: "GPU", fallback: true },
+              { key: "compactBar", label: "Compact bar", fallback: false },
+              { key: "checkConnectivity", label: "Ping check", fallback: false },
+              { key: "notifications", label: "Alert notifications", fallback: false }
             ]
 
             delegate: Item {
@@ -464,7 +663,7 @@ Panel {
               ToggleSwitch {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                checked: root.hw ? root.hw.setting(modelData.key, modelData.key === "notifications" ? false : true) : false
+                checked: root.hw ? root.hw.setting(modelData.key, modelData.fallback) : false
                 foreground: root.fg
                 onToggled: {
                   var patch = {}
@@ -476,6 +675,7 @@ Panel {
           }
         }
       }
+    }
     }
   }
 }
