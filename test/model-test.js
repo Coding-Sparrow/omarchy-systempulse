@@ -15,7 +15,8 @@ const fn = new Function(
     "parseStat, parseLoadavg, parseUptime, parseCpuinfo, parseScalingFreq," +
     "parseMeminfo, discoverDiskDevices, parseDiskstats," +
     "parseNetDev, parseV4DefaultIface, parseV6DefaultIface, netRates," +
-    "parseBattery, parseMilliC, parseGpuBusy, parseTop, parseDf, hottestDisk, rootDisk," +
+    "parseBattery, batteryPowerW, normalizeWatts, parseVramBytes, parseVramSmi," +
+    "parseMilliC, parseGpuBusy, parseTop, parseDf, hottestDisk, rootDisk," +
     "parseDiscover, packetLoss" +
     "});"
 )
@@ -93,6 +94,23 @@ eq("battery percent", chargeBat.percent, 40)
 eq("battery health", Math.round(chargeBat.healthPercent), 80)
 near("battery time h", chargeBat.timeEmptySec, 7200, 1)
 
+const powerBat = api.parseBattery(
+  "POWER_SUPPLY_CAPACITY=35\nPOWER_SUPPLY_STATUS=Charging\n" +
+    "POWER_SUPPLY_POWER_NOW=21513339\n"
+)
+near("battery POWER_NOW µW to W", powerBat.powerW, 21.513339, 0.01)
+near("normalize skipped µW", api.normalizeWatts(21513339), 21.513339, 0.01)
+near("batteryPowerW POWER_NOW", api.batteryPowerW(21513339, 0, 0), 21.513339, 0.01)
+near("batteryPowerW V*I", api.batteryPowerW(0, 11400000, 1887135), 21.513339, 0.05)
+
+const vram = api.parseVramBytes("6442450944", "8589934592")
+near("vram used Gb", vram.usedGb, 6, 0.01)
+near("vram total Gb", vram.totalGb, 8, 0.01)
+near("vram percent", vram.percent, 75, 0.01)
+const smi = api.parseVramSmi("1234, 8192\n512, 8192\n")
+near("vram smi used", smi.usedGb, (1234 + 512) / 1024, 0.01)
+near("vram smi total", smi.totalGb, 16, 0.01)
+
 eq("milliC", api.parseMilliC("49000\n"), 49)
 eq("gpu busy", api.parseGpuBusy("12\n"), 12)
 
@@ -117,7 +135,28 @@ eq("packetLoss", api.packetLoss("3 packets transmitted, 0 received, 100% packet 
 eq(
   "discover",
   api.parseDiscover("cpu /sys/class/hwmon/hwmon6/temp1_input\nbat /sys/class/power_supply/BAT0/uevent\n"),
-  { cpu: "/sys/class/hwmon/hwmon6/temp1_input", nvme: "", gpu: "", bat: "/sys/class/power_supply/BAT0/uevent" }
+  {
+    cpu: "/sys/class/hwmon/hwmon6/temp1_input",
+    nvme: "",
+    gpu: "",
+    bat: "/sys/class/power_supply/BAT0/uevent",
+    vramUsed: "",
+    vramTotal: "",
+    vramSmi: false
+  }
+)
+eq(
+  "discover vram",
+  api.parseDiscover("vram /sys/class/drm/card0/device/mem_info_vram_used /sys/class/drm/card0/device/mem_info_vram_total\nvram_smi 1\n"),
+  {
+    cpu: "",
+    nvme: "",
+    gpu: "",
+    bat: "",
+    vramUsed: "/sys/class/drm/card0/device/mem_info_vram_used",
+    vramTotal: "/sys/class/drm/card0/device/mem_info_vram_total",
+    vramSmi: true
+  }
 )
 
 if (failed) {

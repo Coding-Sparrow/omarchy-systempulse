@@ -34,7 +34,7 @@ Panel {
 
   function sectionItem(id) {
     if (id === "cpu") return cpuBox
-    if (id === "mem" || id === "disk") return memBox
+    if (id === "mem" || id === "disk" || id === "vram") return memBox
     if (id === "net") return netCol
     if (id === "battery") return batCol
     if (id === "proc") return procCol
@@ -106,6 +106,13 @@ Panel {
 
   function fmtGb(v) {
     return v.toFixed(1) + " GB"
+  }
+
+  function fmtPowerW(w) {
+    var v = Math.abs(Number(w) || 0)
+    while (v >= 2000) v /= 1000
+    if (!(v > 0)) return ""
+    return v.toFixed(1) + " W"
   }
 
   function fmtUptime(sec) {
@@ -296,7 +303,7 @@ Panel {
           Rectangle {
             anchors.fill: parent
             anchors.margins: -Style.space(6)
-            visible: root.focusSection === "mem" || root.focusSection === "disk"
+            visible: root.focusSection === "mem" || root.focusSection === "disk" || root.focusSection === "vram"
             color: root.focusFill
             border.color: Style.selectedStateColor(root.fg, Color.accent)
             border.width: 1
@@ -364,6 +371,58 @@ Panel {
             font.pixelSize: Style.font.bodySmall
             wrapMode: Text.Wrap
             width: parent.width
+          }
+
+          Text {
+            visible: root.hw && root.hw.vramTotalGb > 0
+            text: root.headingText("vram", "VRAM")
+            color: root.headingColor("vram")
+            font.family: root.fam
+            font.pixelSize: Style.font.caption
+            font.letterSpacing: 1
+            font.bold: true
+          }
+
+          Item {
+            visible: root.hw && root.hw.vramTotalGb > 0
+            width: parent.width
+            height: vramUsedLabel.implicitHeight
+
+            Text {
+              id: vramUsedLabel
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+              text: "Used"
+              color: root.dim
+              font.family: root.fam
+              font.pixelSize: Style.font.bodySmall
+            }
+
+            Text {
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              text: root.hw ? (root.fmtGb(root.hw.vramUsedGb) + " / " + root.fmtGb(root.hw.vramTotalGb) + " (" + Math.round(root.hw.vramPercent) + "%)") : "—"
+              color: root.fg
+              font.family: root.fam
+              font.pixelSize: Style.font.bodySmall
+            }
+          }
+
+          Rectangle {
+            visible: root.hw && root.hw.vramTotalGb > 0
+            width: parent.width
+            height: Style.space(6)
+            radius: Style.cornerRadius > 0 ? height / 2 : 0
+            color: root.track
+
+            Rectangle {
+              width: Math.round(parent.width * (root.hw ? Math.min(1, root.hw.vramPercent / 100) : 0))
+              height: parent.height
+              radius: parent.radius
+              color: Style.selectedStateColor(root.fg, Color.accent)
+
+              Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+            }
           }
 
           Text {
@@ -578,7 +637,7 @@ Panel {
 
           Text {
             text: root.hw ? (root.hw.batteryPercent + "%  ·  " + root.hw.batteryStatus +
-              (root.hw.batteryPowerW > 0 ? "  ·  " + root.hw.batteryPowerW.toFixed(1) + " W" : "")) : ""
+              (root.fmtPowerW(root.hw.batteryPowerW) !== "" ? "  ·  " + root.fmtPowerW(root.hw.batteryPowerW) : "")) : ""
             color: root.fg
             font.family: root.fam
             font.pixelSize: Style.font.bodySmall
@@ -674,7 +733,7 @@ Panel {
             visible: !root.settingsOpen
             anchors.right: parent.right
             anchors.baseline: settingsTitle.baseline
-            text: "disk, net, battery\u2026"
+            text: "disk, net, battery, vram\u2026"
             color: root.dim
             font.family: root.fam
             font.pixelSize: Style.font.caption
@@ -703,6 +762,7 @@ Panel {
               { key: "showBattery", label: "Battery", fallback: false },
               { key: "showDisk", label: "Disk", fallback: false },
               { key: "showGpu", label: "GPU", fallback: true },
+              { key: "showVram", label: "VRAM", fallback: false },
               { key: "compactBar", label: "Compact bar", fallback: true },
               { key: "checkConnectivity", label: "Ping check", fallback: false },
               { key: "notifications", label: "Alert notifications", fallback: false }

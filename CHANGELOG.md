@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0
+
+- Battery watts match the Omarchy power widget (sysfs µW → W). A 21.5 W charge no longer shows as `21513339.0 W`.
+- Optional **VRAM** bar segment and a VRAM used/total bar in the popup. Reads AMD `mem_info_vram_*` sysfs, or `nvidia-smi` when that is all the machine has.
+
 ## 1.3.0
 
 - Glance defaults: compact CPU sparkline + CPU% + memory% only. Disk, network, and battery are off on the bar so they do not duplicate stock Omarchy icons.

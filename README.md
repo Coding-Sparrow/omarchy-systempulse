@@ -4,7 +4,7 @@ An [iStat Menus](https://bjango.com/mac/istatmenus/)-style system monitor for th
 
 Glanceable CPU and memory on the [Omarchy](https://omarchy.org/) bar, with a popup that names the process eating your machine. Samples `/proc` and `/sys` every 2 seconds. No extra daemons. Ping is off unless you turn it on.
 
-Plugin ID: `coding-sparrow.systempulse` · Version **1.3.0** · [MIT](LICENSE)
+Plugin ID: `coding-sparrow.systempulse` · Version **1.4.0** · [MIT](LICENSE)
 
 **On the bar** (default glance): CPU sparkline + CPU% + memory% — disk, network, and battery stay off so they do not fight stock Omarchy icons:
 
@@ -35,6 +35,7 @@ Default glance:
 | `↓ ↑` | off | Download / upload (Omarchy already has a network icon) |
 | `BAT` | off | Charge % (Omarchy already has a power widget) |
 | `GPU` | auto | Only if sysfs has `gpu_busy_percent` |
+| `VRAM` | off | GPU memory % (AMD sysfs or `nvidia-smi`) |
 
 Turn extra segments on under **Bar display** in the popup. Compact only tightens spacing — names stay on the bar so you can tell CPU from MEM.
 
@@ -52,13 +53,13 @@ Hover the widget for a one-line tooltip (CPU, memory GB, network, battery state,
 | **Left-click a segment** | Open the popup, highlight that block, scroll to it if needed |
 | **Click a process** in the popup | Open `btop` in a floating terminal |
 | **Right-click** the widget | Same `btop` shortcut |
-| **Bar display ▸** | Extra segments (disk / net / battery), compact, ping, notifications |
+| **Bar display ▸** | Extra segments (disk / net / battery / VRAM), compact, ping, notifications |
 | **Click an alert toast** | Opens the popup (toasts are named “System Pulse” and won't sit on top of the widget forever) |
 
 Inside the popup:
 
 1. **CPU** — big %, load averages, frequency, package °C, GPU % if present, per-core bars (any core count), uptime
-2. **Memory** — used / total, cached, swap
+2. **Memory** — used / total, cached, swap, VRAM when the GPU exposes it
 3. **Disk** — each real filesystem (e.g. `/` and `/boot`; bind mounts of the same device are merged), read/write speed, NVMe °C
 4. **Network** — default iface (IPv4, else IPv6), live ↓/↑, totals since boot, local IP
 5. **Battery** — %, status, watts, health vs design, cycles, time remaining
@@ -100,7 +101,7 @@ omarchy plugin remove coding-sparrow.systempulse    # delete the checkout
 - Omarchy with the Omarchy shell / Quickshell bar (4.x)
 - `btop` — optional, only for right-click
 
-No other packages. GPU, battery, NVMe temp, and fans-of-sensors appear only when the kernel exposes them.
+No other packages. GPU busy, VRAM, battery, NVMe temp, and fans-of-sensors appear only when the kernel (or `nvidia-smi`) exposes them.
 
 ---
 
@@ -143,6 +144,7 @@ All keys are optional.
 | `showNet` | `false` | ↓/↑ on the default route |
 | `showBattery` | `false` | Battery % (Omarchy already has a power widget) |
 | `showGpu` | `true` | GPU % when sysfs has `gpu_busy_percent` |
+| `showVram` | `false` | GPU memory % (AMD sysfs or `nvidia-smi`) |
 | `compactBar` | `true` | Drop `CPU` / `MEM` prefixes |
 | `checkConnectivity` | `false` | Periodic ping for packet-loss alerts (off = no extra network) |
 | `interval` | `2000` | Sample period in ms (500–10000) |
@@ -177,9 +179,10 @@ Works without extra setup on typical Omarchy laptops and desktops.
 
 - **CPU temp:** Intel `coretemp` (Package id), AMD `k10temp` / `zenpower` (Tctl/Tdie), ARM `cpu` / `soc_thermal`, then `acpitz`
 - **CPU frequency:** `/proc/cpuinfo` MHz, or `cpufreq/scaling_cur_freq` (ARM)
-- **Battery:** `ENERGY_*` or `CHARGE_*` sysfs (health, watts, time left)
+- **Battery:** `ENERGY_*` or `CHARGE_*` sysfs (health, watts, time left). Power is converted from microwatts (or µV × µA) to watts.
 - **Network:** IPv4 default route first, IPv6 if that's all there is
 - **GPU:** shown only if `/sys/class/drm/card*/device/gpu_busy_percent` exists (common on AMD; often missing on Intel)
+- **VRAM:** AMD `mem_info_vram_used` / `mem_info_vram_total`, else `nvidia-smi` if installed. Hidden on GPUs that expose neither.
 - **Disks:** unique block devices, tmpfs/overlay skipped; `/` preferred over `/home` when they are the same volume
 
 ---

@@ -61,6 +61,14 @@ BarWidget {
   // ---- GPU (sysfs busy percent; hidden when undiscovered)
   property real gpuPercent: -1
   property string gpuBusyPath: ""
+  property real vramPercent: 0
+  property real vramUsedGb: 0
+  property real vramTotalGb: 0
+  property real vramUsedBytes: -1
+  property real vramTotalBytes: -1
+  property string vramUsedPath: ""
+  property string vramTotalPath: ""
+  property bool vramSmi: false
 
   // ---- Temperatures
   property real cpuTempC: 0
@@ -83,6 +91,7 @@ BarWidget {
   readonly property bool showBattery: flag("showBattery", false)
   readonly property bool showDisk: flag("showDisk", false)
   readonly property bool showGpu: flag("showGpu", true)
+  readonly property bool showVram: flag("showVram", false)
   readonly property bool compactBar: flag("compactBar", true)
   readonly property bool checkConnectivity: flag("checkConnectivity", false)
   readonly property int sampleInterval: setting("interval", 2000)
@@ -115,7 +124,9 @@ BarWidget {
   property string hoveredSection: ""
 
   function cpuSegText() {
-    return "CPU " + cpuPercent + "%"
+    var s = "CPU " + cpuPercent + "%"
+    if (cpuTempC > 0) s += " · " + Math.round(cpuTempC) + "°C"
+    return s
   }
   function memSegText() {
     return "MEM " + Math.round(memPercent) + "%"
@@ -123,6 +134,9 @@ BarWidget {
   function gpuSegText() {
     var pct = gpuPercent < 0 ? 0 : Math.round(gpuPercent)
     return "GPU " + pct + "%"
+  }
+  function vramSegText() {
+    return "VRAM " + Math.round(vramPercent) + "%"
   }
   function batSegText() {
     return "BAT " + batteryPercent + "%"
@@ -136,6 +150,7 @@ BarWidget {
     if (showCpu) segs.push({ id: "cpu", text: cpuSegText(), alert: cpuAlert })
     if (showMem) segs.push({ id: "mem", text: memSegText(), alert: memAlert })
     if (showGpu && gpuPercent >= 0) segs.push({ id: "cpu", text: gpuSegText(), alert: false })
+    if (showVram && vramTotalGb > 0) segs.push({ id: "vram", text: vramSegText(), alert: false })
     if (showDisk && diskTotalBytes > 0) segs.push({ id: "disk", text: diskSegText(), alert: diskAlert })
     if (showNet && netIface !== "") segs.push({ id: "net", text: "\u2193" + Model.speedShort(netDown) + " \u2191" + Model.speedShort(netUp), alert: netAlert })
     if (showBattery && batteryPresent) segs.push({ id: "battery", text: batSegText(), alert: batteryAlert })
@@ -161,6 +176,7 @@ BarWidget {
     parts.push("CPU " + cpuPercent + "%")
     if (memTotalGb > 0) parts.push("Memory " + memUsedGb.toFixed(1) + " / " + memTotalGb.toFixed(1) + " GB")
     if (gpuPercent >= 0) parts.push("GPU " + Math.round(gpuPercent) + "%")
+    if (vramTotalGb > 0) parts.push("VRAM " + vramUsedGb.toFixed(1) + " / " + vramTotalGb.toFixed(1) + " GB")
     if (showNet && netIface !== "") parts.push("\u2193" + Model.speed(netDown) + " \u2191" + Model.speed(netUp))
     if (batteryPresent) parts.push("BAT " + batteryPercent + "% " + batteryStatus)
     if (cpuTempC > 0) parts.push("CPU " + Math.round(cpuTempC) + "\u00B0C")
@@ -234,6 +250,17 @@ BarWidget {
     if (cpuTempPath !== "") cpuTempFile.reload()
     if (nvmeTempPath !== "") nvmeTempFile.reload()
     if (gpuBusyPath !== "") gpuBusyFile.reload()
+    if (vramUsedPath !== "") vramUsedFile.reload()
+    if (vramTotalPath !== "") vramTotalFile.reload()
+    if (vramSmi && !vramSmiProc.running) vramSmiProc.running = true
+  }
+
+  function applyVramBytes() {
+    var r = Model.parseVramBytes(vramUsedBytes, vramTotalBytes)
+    if (!r) return
+    vramUsedGb = r.usedGb
+    vramTotalGb = r.totalGb
+    vramPercent = r.percent
   }
 
   function applyStat(content) {
@@ -363,6 +390,34 @@ BarWidget {
     onLoaded: { var v = Model.parseGpuBusy(text()); if (v >= 0) root.gpuPercent = v }
   }
 
+  FileView {
+    id: vramUsedFile
+    path: root.vramUsedPath
+    watchChanges: false
+    printErrors: false
+    onLoaded: {
+      var v = Number(String(text()).trim())
+      if (!isNaN(v) && v >= 0) {
+        root.vramUsedBytes = v
+        root.applyVramBytes()
+      }
+    }
+  }
+
+  FileView {
+    id: vramTotalFile
+    path: root.vramTotalPath
+    watchChanges: false
+    printErrors: false
+    onLoaded: {
+      var v = Number(String(text()).trim())
+      if (!isNaN(v) && v > 0) {
+        root.vramTotalBytes = v
+        root.applyVramBytes()
+      }
+    }
+  }
+
   Timer {
     interval: root.sampleInterval
     running: true
@@ -428,6 +483,22 @@ BarWidget {
   }
 
   Process {
+    id: vramSmiProc
+    command: ["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"]
+    stdout: StdioCollector {
+      id: vramSmiOut
+      waitForEnd: true
+      onStreamFinished: {
+        var r = Model.parseVramSmi(vramSmiOut.text)
+        if (!r) return
+        root.vramUsedGb = r.usedGb
+        root.vramTotalGb = r.totalGb
+        root.vramPercent = r.percent
+      }
+    }
+  }
+
+  Process {
     id: topProc
     command: ["ps", "-eo", "pid,pcpu,pmem,comm", "--sort=-pcpu"]
     stdout: StdioCollector {
@@ -458,6 +529,9 @@ BarWidget {
         if (d.cpu) root.cpuTempPath = d.cpu
         if (d.nvme) root.nvmeTempPath = d.nvme
         if (d.gpu) root.gpuBusyPath = d.gpu
+        if (d.vramUsed) root.vramUsedPath = d.vramUsed
+        if (d.vramTotal) root.vramTotalPath = d.vramTotal
+        if (d.vramSmi) root.vramSmi = true
         if (d.bat) {
           root.batteryPath = d.bat
           root.batteryPresent = true

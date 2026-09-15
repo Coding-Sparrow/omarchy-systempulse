@@ -244,6 +244,63 @@ function netRates(iface, stats, prevNet, now) {
   }
 }
 
+function normalizeWatts(watts) {
+  var w = Math.abs(Number(watts) || 0)
+  // Sysfs POWER_NOW is microwatts. If that conversion is skipped, a 21.5 W
+  // charge shows up as 21513339.0 W (GitHub issue #1). Battery packs do not
+  // draw kilowatts, so keep scaling until the reading is plausible.
+  while (w >= 2000) w /= 1000
+  return w
+}
+
+function batteryPowerW(powerNow, voltageNow, currentNow) {
+  var p = Number(powerNow) || 0
+  var watts = 0
+  if (p > 0)
+    watts = p / 1000000
+  else {
+    var v = Number(voltageNow) || 0
+    var c = Number(currentNow) || 0
+    if (v !== 0 && c !== 0)
+      watts = Math.abs(v * c) / 1000000000000
+  }
+  return normalizeWatts(watts)
+}
+
+function parseVramBytes(usedText, totalText) {
+  var used = Number(String(usedText == null ? "" : usedText).trim())
+  var total = Number(String(totalText == null ? "" : totalText).trim())
+  if (!(total > 0) || isNaN(used) || used < 0) return null
+  return {
+    usedGb: used / 1073741824,
+    totalGb: total / 1073741824,
+    percent: 100 * used / total
+  }
+}
+
+function parseVramSmi(content) {
+  var lines = String(content).trim().split("\n")
+  var usedMiB = 0
+  var totalMiB = 0
+  var n = 0
+  for (var i = 0; i < lines.length; i++) {
+    var f = lines[i].split(",")
+    if (f.length < 2) continue
+    var u = Number(String(f[0]).replace(/[^0-9.]/g, ""))
+    var t = Number(String(f[1]).replace(/[^0-9.]/g, ""))
+    if (isNaN(u) || isNaN(t) || t <= 0) continue
+    usedMiB += u
+    totalMiB += t
+    n++
+  }
+  if (n === 0) return null
+  return {
+    usedGb: usedMiB / 1024,
+    totalGb: totalMiB / 1024,
+    percent: 100 * usedMiB / totalMiB
+  }
+}
+
 function parseBattery(content) {
   var map = {}
   var lines = String(content).trim().split("\n")
@@ -274,13 +331,12 @@ function parseBattery(content) {
     return null
 
   var status = map["POWER_SUPPLY_STATUS"] || "Unknown"
-  var voltage = Number(map["POWER_SUPPLY_VOLTAGE_NOW"]) || 0
-  var powerUw = Number(map["POWER_SUPPLY_POWER_NOW"]) || 0
-  if (powerUw <= 0) {
-    var currentUa = Number(map["POWER_SUPPLY_CURRENT_NOW"]) || 0
-    if (voltage > 0 && currentUa !== 0)
-      powerUw = Math.abs(voltage * currentUa) / 1000000
-  }
+  var powerW = batteryPowerW(
+    map["POWER_SUPPLY_POWER_NOW"],
+    map["POWER_SUPPLY_VOLTAGE_NOW"],
+    map["POWER_SUPPLY_CURRENT_NOW"]
+  )
+  var powerUw = powerW * 1000000
 
   var health = 0
   if (energyDesign > 0 && energyFull > 0)
@@ -301,7 +357,7 @@ function parseBattery(content) {
     present: true,
     percent: percent,
     status: status,
-    powerW: powerUw / 1000000,
+    powerW: powerW,
     healthPercent: health,
     cycles: Number(map["POWER_SUPPLY_CYCLE_COUNT"]) || 0,
     timeEmptySec: timeEmpty
@@ -402,7 +458,7 @@ function rootDisk(disks) {
 }
 
 function parseDiscover(content) {
-  var out = { cpu: "", nvme: "", gpu: "", bat: "" }
+  var out = { cpu: "", nvme: "", gpu: "", bat: "", vramUsed: "", vramTotal: "", vramSmi: false }
   var lines = String(content).trim().split("\n")
   for (var i = 0; i < lines.length; i++) {
     var parts = lines[i].split(" ")
@@ -411,6 +467,10 @@ function parseDiscover(content) {
     else if (parts[0] === "nvme") out.nvme = parts[1]
     else if (parts[0] === "gpu") out.gpu = parts[1]
     else if (parts[0] === "bat") out.bat = parts[1]
+    else if (parts[0] === "vram" && parts.length >= 3) {
+      out.vramUsed = parts[1]
+      out.vramTotal = parts[2]
+    } else if (parts[0] === "vram_smi") out.vramSmi = true
   }
   return out
 }
@@ -463,4 +523,14 @@ var DISCOVER_SCRIPT =
   "[ -n \"$bat\" ] && echo \"bat $bat/uevent\"; " +
   "for c in /sys/class/drm/card*/device/gpu_busy_percent; do " +
   "  [ -f \"$c\" ] && echo \"gpu $c\" && break; " +
-  "done"
+  "done; " +
+  "vram_used=\"\"; vram_total=\"\"; vram_best=0; " +
+  "for d in /sys/class/drm/card*/device; do " +
+  "  [ -f \"$d/mem_info_vram_used\" ] && [ -f \"$d/mem_info_vram_total\" ] || continue; " +
+  "  tot=$(cat \"$d/mem_info_vram_total\" 2>/dev/null); " +
+  "  [ \"$tot\" -gt \"$vram_best\" ] 2>/dev/null || continue; " +
+  "  vram_best=$tot; vram_used=\"$d/mem_info_vram_used\"; vram_total=\"$d/mem_info_vram_total\"; " +
+  "done; " +
+  "if [ -n \"$vram_used\" ]; then echo \"vram $vram_used $vram_total\"; " +
+  "elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then echo \"vram_smi 1\"; " +
+  "fi"
