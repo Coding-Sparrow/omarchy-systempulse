@@ -227,7 +227,7 @@ omarchy plugin validate .
 node test/model-test.js
 ```
 
-If a change doesn't apply: `omarchy-shell shell rescanPlugins` or `omarchy restart shell`.
+Edits log `Local plugin changed, reloading` but, on Omarchy 4.0.x, the shell keeps running the old QML/JS from its component cache ([basecamp/omarchy#6981](https://github.com/basecamp/omarchy/issues/6981)); `rescanPlugins` doesn't help either. Run `omarchy restart shell` to load your changes. The same applies after `omarchy plugin update`.
 
 See [CHANGELOG.md](CHANGELOG.md) for 1.2.0 / 1.1.0 notes.
 
