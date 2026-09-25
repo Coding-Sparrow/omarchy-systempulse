@@ -33,7 +33,7 @@ Panel {
   }
 
   function sectionItem(id) {
-    if (id === "cpu") return cpuBox
+    if (id === "cpu" || id === "gpu") return cpuBox
     if (id === "mem" || id === "disk" || id === "vram") return memBox
     if (id === "net") return netCol
     if (id === "battery") return batCol
@@ -186,7 +186,7 @@ Panel {
           Rectangle {
             anchors.fill: parent
             anchors.margins: -Style.space(6)
-            visible: root.focusSection === "cpu"
+            visible: root.focusSection === "cpu" || root.focusSection === "gpu"
             color: root.focusFill
             border.color: Style.selectedStateColor(root.fg, Color.accent)
             border.width: 1
@@ -449,14 +449,19 @@ Panel {
                 Text {
                   id: diskLabel
                   anchors.left: parent.left
+                  anchors.right: diskValue.left
+                  anchors.rightMargin: Style.space(8)
                   anchors.verticalCenter: parent.verticalCenter
-                  text: modelData.target
+                  // /run/media/<user>/LABEL → LABEL; long paths elide in the middle
+                  text: String(modelData.target).replace(/^\/run\/media\/[^\/]+\//, "").replace(/^\/media\/[^\/]+\//, "")
+                  elide: Text.ElideMiddle
                   color: root.dim
                   font.family: root.fam
                   font.pixelSize: Style.font.bodySmall
                 }
 
                 Text {
+                  id: diskValue
                   anchors.right: parent.right
                   anchors.verticalCenter: parent.verticalCenter
                   text: (modelData.used / 1073741824).toFixed(modelData.total > 10737418240 ? 0 : 1) + " / " +
@@ -653,7 +658,12 @@ Panel {
                 var h = Math.floor(root.hw.batteryTimeEmptySec / 3600)
                 var m = Math.floor((root.hw.batteryTimeEmptySec % 3600) / 60)
                 parts.push((h > 0 ? h + "h " + m + "m" : m + "m") + " left")
+              } else if (root.hw.batteryTimeFullSec > 0) {
+                var fh = Math.floor(root.hw.batteryTimeFullSec / 3600)
+                var fm = Math.floor((root.hw.batteryTimeFullSec % 3600) / 60)
+                parts.push((fh > 0 ? fh + "h " + fm + "m" : fm + "m") + " to full")
               }
+              if (root.hw.batteryPacks > 1) parts.push(root.hw.batteryPacks + " packs")
               return parts.join("   ·   ")
             }
             visible: text !== ""

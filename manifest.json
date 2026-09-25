@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "coding-sparrow.systempulse",
   "name": "System Pulse",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": "Coding-Sparrow",
   "description": "Glanceable CPU and memory in the bar, with a process-first detail popup.",
   "kinds": [
@@ -91,7 +91,7 @@
         "type": "boolean",
         "label": "Show GPU",
         "defaultValue": true,
-        "description": "GPU busy percent in the bar, when the kernel exposes gpu_busy_percent (AMD/some NVIDIA)."
+        "description": "GPU busy percent in the bar: AMD gpu_busy_percent, or Intel i915/xe idle residency."
       },
       {
         "key": "showVram",

@@ -157,8 +157,21 @@ function discoverDiskDevices(content) {
   return names
 }
 
+// Whole physical disks only. Counting physical devices (not dm-*/md*) sees every
+// drive exactly once, whether it sits under LUKS/LVM/RAID or not, and still
+// catches hot-plugged USB disks that were not there at startup.
+function isPhysicalDisk(name) {
+  return /^(nvme[0-9]+n[0-9]+|sd[a-z]+|vd[a-z]+|xvd[a-z]+|hd[a-z]+|mmcblk[0-9]+)$/.test(name)
+}
+
+// diskDevices is optional: pass an array to restrict to those names (legacy),
+// or null/undefined to auto-select physical disks each sample.
 function parseDiskstats(content, diskDevices, prevDisk, now) {
   var lines = String(content).trim().split("\n")
+  var devs = {}
+  var prevDevs = prevDisk && prevDisk.devs ? prevDisk.devs : null
+  var dRead = 0
+  var dWrite = 0
   var readSectors = 0
   var writeSectors = 0
   for (var k = 0; k < lines.length; k++) {
@@ -166,23 +179,39 @@ function parseDiskstats(content, diskDevices, prevDisk, now) {
     if (h.length < 10) continue
     var name = h[2]
     if (skipDiskName(name)) continue
-    if (diskDevices.indexOf(name) === -1) continue
-    readSectors += Number(h[5])
-    writeSectors += Number(h[9])
+    if (diskDevices && diskDevices.length) {
+      if (diskDevices.indexOf(name) === -1) continue
+    } else if (!isPhysicalDisk(name)) continue
+    var r = Number(h[5])
+    var w = Number(h[9])
+    devs[name] = { read: r, write: w }
+    readSectors += r
+    writeSectors += w
+    // Only diff devices seen last time, so a newly plugged disk's lifetime
+    // counters do not show up as one giant spike.
+    var p = prevDevs ? prevDevs[name] : null
+    if (p) {
+      dRead += Math.max(0, r - p.read)
+      dWrite += Math.max(0, w - p.write)
+    }
   }
   var readSpeed = 0
   var writeSpeed = 0
   if (prevDisk) {
     var dt = (now - prevDisk.time) / 1000
     if (dt > 0) {
-      readSpeed = Math.max(0, (readSectors - prevDisk.read) * 512 / dt)
-      writeSpeed = Math.max(0, (writeSectors - prevDisk.write) * 512 / dt)
+      if (!prevDevs) {
+        dRead = Math.max(0, readSectors - prevDisk.read)
+        dWrite = Math.max(0, writeSectors - prevDisk.write)
+      }
+      readSpeed = dRead * 512 / dt
+      writeSpeed = dWrite * 512 / dt
     }
   }
   return {
     readSpeed: readSpeed,
     writeSpeed: writeSpeed,
-    prevDisk: { time: now, read: readSectors, write: writeSectors }
+    prevDisk: { time: now, read: readSectors, write: writeSectors, devs: devs }
   }
 }
 
@@ -201,25 +230,39 @@ function parseNetDev(content) {
   return stats
 }
 
+// Default route with the lowest metric wins (e.g. ethernet 100 over wifi 600).
+// Point-to-point tunnels (wg/tun) have a 0.0.0.0 gateway, so accept those too
+// as long as the route is up and the mask is /0.
 function parseV4DefaultIface(content) {
   var lines = String(content).trim().split("\n")
+  var best = ""
+  var bestMetric = Infinity
   for (var i = 1; i < lines.length; i++) {
     var f = lines[i].trim().split(/\s+/)
-    if (f.length >= 8 && f[1] === "00000000" && f[2] !== "00000000")
-      return f[0]
+    if (f.length < 8 || f[1] !== "00000000" || f[7] !== "00000000") continue
+    var flags = parseInt(f[3], 16)
+    if (!isNaN(flags) && (flags & 1) === 0) continue
+    var metric = Number(f[6]) || 0
+    if (metric < bestMetric) { best = f[0]; bestMetric = metric }
   }
-  return ""
+  return best
 }
 
 function parseV6DefaultIface(content) {
   var lines = String(content).trim().split("\n")
+  var best = ""
+  var bestMetric = Infinity
   for (var i = 0; i < lines.length; i++) {
     var f = lines[i].trim().split(/\s+/)
     if (f.length < 10) continue
-    if (f[0] === "00000000000000000000000000000000" && f[1] === "00" && f[9] !== "lo")
-      return f[9]
+    if (f[0] !== "00000000000000000000000000000000" || f[1] !== "00" || f[9] === "lo") continue
+    var flags = parseInt(f[8], 16)
+    if (!isNaN(flags) && ((flags & 1) === 0 || (flags & 0x200) !== 0)) continue // !RTF_UP or RTF_REJECT
+    var metric = parseInt(f[5], 16)
+    if (isNaN(metric)) metric = 0
+    if (metric < bestMetric) { best = f[9]; bestMetric = metric }
   }
-  return ""
+  return best
 }
 
 function netRates(iface, stats, prevNet, now) {
@@ -345,13 +388,18 @@ function parseBattery(content) {
     health = 100 * chargeFull / chargeDesign
 
   var discharging = status === "Discharging"
+  var charging = status === "Charging"
+  var currentUa = Math.abs(Number(map["POWER_SUPPLY_CURRENT_NOW"]) || 0)
   var timeEmpty = 0
+  var timeFull = 0
   if (discharging && powerUw > 0 && energyNow > 0)
     timeEmpty = energyNow / powerUw * 3600
-  else if (discharging && chargeNow > 0) {
-    var currentUa2 = Math.abs(Number(map["POWER_SUPPLY_CURRENT_NOW"]) || 0)
-    timeEmpty = currentUa2 > 0 ? chargeNow / currentUa2 * 3600 : 0
-  }
+  else if (discharging && chargeNow > 0)
+    timeEmpty = currentUa > 0 ? chargeNow / currentUa * 3600 : 0
+  if (charging && powerUw > 0 && energyFull > energyNow && energyNow > 0)
+    timeFull = (energyFull - energyNow) / powerUw * 3600
+  else if (charging && currentUa > 0 && chargeFull > chargeNow && chargeNow > 0)
+    timeFull = (chargeFull - chargeNow) / currentUa * 3600
 
   return {
     present: true,
@@ -360,7 +408,58 @@ function parseBattery(content) {
     powerW: powerW,
     healthPercent: health,
     cycles: Number(map["POWER_SUPPLY_CYCLE_COUNT"]) || 0,
-    timeEmptySec: timeEmpty
+    timeEmptySec: timeEmpty,
+    timeFullSec: timeFull,
+    // Energy in µWh, for combining multiple packs.
+    energyNow: energyNow > 0 ? energyNow : 0,
+    energyFull: energyFull > 0 ? energyFull : 0,
+    energyDesign: energyDesign > 0 ? energyDesign : 0
+  }
+}
+
+// Several packs (ThinkPad BAT0 + BAT1) arrive as concatenated uevent files.
+// Combine them the way upower does: energy-weighted percent, summed power.
+function parseBatteries(content) {
+  var chunks = String(content).split(/(?=^POWER_SUPPLY_NAME=)/m)
+  var packs = []
+  for (var i = 0; i < chunks.length; i++) {
+    if (!/POWER_SUPPLY_/.test(chunks[i])) continue
+    var b = parseBattery(chunks[i])
+    if (b) packs.push(b)
+  }
+  if (packs.length === 0) return null
+  if (packs.length === 1) return packs[0]
+
+  var now = 0, full = 0, design = 0, power = 0, cycles = 0, pctSum = 0
+  var status = "Unknown"
+  for (var j = 0; j < packs.length; j++) {
+    var p = packs[j]
+    now += p.energyNow
+    full += p.energyFull
+    design += p.energyDesign
+    power += p.powerW
+    pctSum += p.percent
+    cycles = Math.max(cycles, p.cycles)
+    // Any pack discharging means the system is on battery; else charging wins.
+    if (p.status === "Discharging") status = "Discharging"
+    else if (p.status === "Charging" && status !== "Discharging") status = "Charging"
+    else if (status === "Unknown") status = p.status
+  }
+  var percent = full > 0 ? clampPct(100 * now / full) : Math.round(pctSum / packs.length)
+  var powerUw = power * 1000000
+  return {
+    present: true,
+    percent: percent,
+    status: status,
+    powerW: power,
+    healthPercent: design > 0 && full > 0 ? 100 * full / design : packs[0].healthPercent,
+    cycles: cycles,
+    timeEmptySec: status === "Discharging" && powerUw > 0 && now > 0 ? now / powerUw * 3600 : 0,
+    timeFullSec: status === "Charging" && powerUw > 0 && full > now ? (full - now) / powerUw * 3600 : 0,
+    energyNow: now,
+    energyFull: full,
+    energyDesign: design,
+    packs: packs.length
   }
 }
 
@@ -374,6 +473,52 @@ function parseGpuBusy(text) {
   var v = Number(String(text).trim())
   if (!isNaN(v) && v >= 0) return Math.max(0, Math.min(100, v))
   return -1
+}
+
+// Intel iGPU busy % from an idle-residency counter (i915 rc6_residency_ms or
+// xe gtidle idle_residency_ms). busy = 1 - idle_delta / wall_delta.
+function gpuBusyFromIdle(idleMs, prev, nowMs) {
+  var idle = Number(String(idleMs).trim())
+  if (isNaN(idle) || idle < 0) return { percent: -1, prev: null }
+  var next = { idle: idle, time: nowMs }
+  if (!prev || !(nowMs > prev.time) || idle < prev.idle) return { percent: -1, prev: next }
+  var busy = 100 * (1 - (idle - prev.idle) / (nowMs - prev.time))
+  return { percent: Math.max(0, Math.min(100, busy)), prev: next }
+}
+
+// Real per-process CPU from `cat /proc/[0-9]*/stat`, diffed against the previous
+// sample. (`ps pcpu` is the lifetime average, which hides what is busy *now*.)
+// Returns { top: [...5], ticks: {pid: utime+stime} }.
+function parseProcStats(content, prevTicks, dtSec, memTotalKb, pageSize, clkTck, limit) {
+  var lines = String(content).split("\n")
+  var ticks = {}
+  var rows = []
+  var hz = clkTck > 0 ? clkTck : 100
+  var page = pageSize > 0 ? pageSize : 4096
+  var memKb = memTotalKb > 0 ? memTotalKb : 0
+  var n = limit > 0 ? limit : 5
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i]
+    var open = line.indexOf("(")
+    var close = line.lastIndexOf(")")
+    if (open < 0 || close < open) continue
+    var pid = Number(line.slice(0, open).trim())
+    if (!(pid > 0)) continue
+    var name = line.slice(open + 1, close)
+    var f = line.slice(close + 2).split(" ")
+    // f[0] = state (field 3), utime = field 14, stime = 15, rss = 24
+    if (f.length < 22) continue
+    var t = Number(f[11]) + Number(f[12])
+    ticks[pid] = t
+    if (!prevTicks || !(dtSec > 0)) continue
+    var p = prevTicks[pid]
+    if (p === undefined) continue
+    var cpu = Math.max(0, (t - p) / hz / dtSec * 100)
+    var rssKb = Number(f[21]) * page / 1024
+    rows.push({ pid: pid, cpu: cpu, mem: memKb > 0 ? 100 * rssKb / memKb : 0, name: name })
+  }
+  rows.sort(function(a, b) { return b.cpu - a.cpu || b.mem - a.mem })
+  return { top: rows.slice(0, n), ticks: ticks }
 }
 
 function parseTop(content) {
@@ -399,7 +544,14 @@ var SKIP_FS = {
   sysfs: true, cgroup: true, cgroup2: true, autofs: true, efivarfs: true,
   fusectl: true, debugfs: true, tracefs: true, securityfs: true, ramfs: true,
   hugetlbfs: true, mqueue: true, configfs: true, pstore: true, bpf: true,
-  nsfs: true, devpts: true, binfmt_misc: true
+  nsfs: true, devpts: true, binfmt_misc: true,
+  // Read-only / always-100% images (ISO sticks, snaps) would trip the full alert.
+  iso9660: true, udf: true, erofs: true, "fuse.portal": true, "fuse.gvfsd-fuse": true
+}
+
+// Removable media: shown in the popup, but never trips the "disk full" alert.
+function isRemovableMount(target) {
+  return /^\/(run\/)?media\//.test(String(target))
 }
 
 function parseDf(content) {
@@ -442,9 +594,29 @@ function parseDf(content) {
 
 function hottestDisk(disks) {
   var max = 0
-  for (var i = 0; i < disks.length; i++)
+  for (var i = 0; i < disks.length; i++) {
+    if (isRemovableMount(disks[i].target)) continue
     if (disks[i].percent > max) max = disks[i].percent
+  }
   return max
+}
+
+// Latching threshold: trips at `on`, clears only once below `off`.
+function hysteresis(active, value, on, off) {
+  return active ? value >= off : value >= on
+}
+
+function clampInt(v, lo, hi, fallback) {
+  var n = Math.round(Number(v))
+  if (isNaN(n)) return fallback
+  return Math.max(lo, Math.min(hi, n))
+}
+
+function fmtDuration(sec) {
+  var s = Math.floor(sec)
+  var h = Math.floor(s / 3600)
+  var m = Math.floor((s % 3600) / 60)
+  return h > 0 ? h + "h " + m + "m" : m + "m"
 }
 
 function rootDisk(disks) {
@@ -458,7 +630,7 @@ function rootDisk(disks) {
 }
 
 function parseDiscover(content) {
-  var out = { cpu: "", nvme: "", gpu: "", bat: "", vramUsed: "", vramTotal: "", vramSmi: false }
+  var out = { cpu: "", nvme: "", gpu: "", gpuIdle: "", gpuRuntime: "", bat: "", bats: [], vramUsed: "", vramTotal: "", vramSmi: false, clkTck: 100, pageSize: 4096 }
   var lines = String(content).trim().split("\n")
   for (var i = 0; i < lines.length; i++) {
     var parts = lines[i].split(" ")
@@ -466,7 +638,16 @@ function parseDiscover(content) {
     if (parts[0] === "cpu") out.cpu = parts[1]
     else if (parts[0] === "nvme") out.nvme = parts[1]
     else if (parts[0] === "gpu") out.gpu = parts[1]
-    else if (parts[0] === "bat") out.bat = parts[1]
+    else if (parts[0] === "bat") {
+      if (!out.bat) out.bat = parts[1]
+      out.bats.push(parts[1])
+    }
+    else if (parts[0] === "gpuidle") {
+      out.gpuIdle = parts[1]
+      if (parts.length >= 3) out.gpuRuntime = parts[2]
+    }
+    else if (parts[0] === "clk") out.clkTck = Number(parts[1]) || 100
+    else if (parts[0] === "page") out.pageSize = Number(parts[1]) || 4096
     else if (parts[0] === "vram" && parts.length >= 3) {
       out.vramUsed = parts[1]
       out.vramTotal = parts[2]
@@ -480,7 +661,10 @@ function packetLoss(text) {
   return m ? Number(m[1]) : 100
 }
 
-var DF_SCRIPT = "df -B1 --output=source,target,fstype,size,used -x tmpfs -x devtmpfs -x squashfs -x overlay -x efivarfs -x proc -x sysfs 2>/dev/null"
+var PROC_STAT_SCRIPT = "cat /proc/[0-9]*/stat 2>/dev/null"
+
+// timeout: a stale NFS/SMB mount must not wedge the sampler.
+var DF_SCRIPT = "timeout 5 df -B1 --output=source,target,fstype,size,used -x tmpfs -x devtmpfs -x squashfs -x overlay -x efivarfs -x proc -x sysfs 2>/dev/null"
 
 var DISCOVER_SCRIPT =
   "cpu=\"\"; nvme=\"\"; gpu=\"\"; " +
@@ -517,13 +701,32 @@ var DISCOVER_SCRIPT =
   "bat=$(ls -d /sys/class/power_supply/BAT* 2>/dev/null | head -1); " +
   "if [ -z \"$bat\" ]; then " +
   "  for p in /sys/class/power_supply/*; do " +
-  "    [ \"$(cat \"$p/type\" 2>/dev/null)\" = \"Battery\" ] && bat=\"$p\" && break; " +
+  "    [ \"$(cat \"$p/type\" 2>/dev/null)\" = \"Battery\" ] || continue; " +
+  "    [ \"$(cat \"$p/scope\" 2>/dev/null)\" = \"Device\" ] && continue; " +
+  "    bat=\"$p\" && break; " +
   "  done; " +
   "fi; " +
   "[ -n \"$bat\" ] && echo \"bat $bat/uevent\"; " +
-  "for c in /sys/class/drm/card*/device/gpu_busy_percent; do " +
-  "  [ -f \"$c\" ] && echo \"gpu $c\" && break; " +
+  // Extra system packs (BAT1…); skip peripherals (mouse/keyboard: scope=Device).
+  "for p in /sys/class/power_supply/*; do " +
+  "  [ \"$p\" = \"$bat\" ] && continue; " +
+  "  [ \"$(cat \"$p/type\" 2>/dev/null)\" = \"Battery\" ] || continue; " +
+  "  [ \"$(cat \"$p/scope\" 2>/dev/null)\" = \"Device\" ] && continue; " +
+  "  echo \"bat $p/uevent\"; " +
   "done; " +
+  "gpu=\"\"; " +
+  "for c in /sys/class/drm/card*/device/gpu_busy_percent; do " +
+  "  [ -f \"$c\" ] && gpu=\"$c\" && echo \"gpu $c\" && break; " +
+  "done; " +
+  "if [ -z \"$gpu\" ]; then " +
+  "  for c in /sys/class/drm/card[0-9]*; do " +
+  "    for f in \"$c/device/tile0/gt0/gtidle/idle_residency_ms\" \"$c/gt/gt0/rc6_residency_ms\" \"$c/power/rc6_residency_ms\"; do " +
+  "      [ -r \"$f\" ] && echo \"gpuidle $f $c/device/power/runtime_status\" && break 2; " +
+  "    done; " +
+  "  done; " +
+  "fi; " +
+  "echo \"clk $(getconf CLK_TCK 2>/dev/null || echo 100)\"; " +
+  "echo \"page $(getconf PAGESIZE 2>/dev/null || echo 4096)\"; " +
   "vram_used=\"\"; vram_total=\"\"; vram_best=0; " +
   "for d in /sys/class/drm/card*/device; do " +
   "  [ -f \"$d/mem_info_vram_used\" ] && [ -f \"$d/mem_info_vram_total\" ] || continue; " +

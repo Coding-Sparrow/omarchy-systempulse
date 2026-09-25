@@ -4,7 +4,7 @@ An [iStat Menus](https://bjango.com/mac/istatmenus/)-style system monitor for th
 
 Glanceable CPU and memory on the [Omarchy](https://omarchy.org/) bar, with a popup that names the process eating your machine. Samples `/proc` and `/sys` every 2 seconds. No extra daemons. Ping is off unless you turn it on.
 
-Plugin ID: `coding-sparrow.systempulse` · Version **1.4.0** · [MIT](LICENSE)
+Plugin ID: `coding-sparrow.systempulse` · Version **1.5.0** · [MIT](LICENSE)
 
 **On the bar** (default glance): CPU sparkline + CPU% + memory% — disk, network, and battery stay off so they do not fight stock Omarchy icons:
 
@@ -34,7 +34,7 @@ Default glance:
 | `DISK` | off | **Root** (`/`) filesystem % — not `/boot` |
 | `↓ ↑` | off | Download / upload (Omarchy already has a network icon) |
 | `BAT` | off | Charge % (Omarchy already has a power widget) |
-| `GPU` | auto | Only if sysfs has `gpu_busy_percent` |
+| `GPU` | auto | AMD `gpu_busy_percent`, or Intel i915/xe idle residency |
 | `VRAM` | off | GPU memory % (AMD sysfs or `nvidia-smi`) |
 
 Turn extra segments on under **Bar display** in the popup. Compact only tightens spacing — names stay on the bar so you can tell CPU from MEM.
@@ -62,8 +62,8 @@ Inside the popup:
 2. **Memory** — used / total, cached, swap, VRAM when the GPU exposes it
 3. **Disk** — each real filesystem (e.g. `/` and `/boot`; bind mounts of the same device are merged), read/write speed, NVMe °C
 4. **Network** — default iface (IPv4, else IPv6), live ↓/↑, totals since boot, local IP
-5. **Battery** — %, status, watts, health vs design, cycles, time remaining
-6. **Processes** — top 5 by CPU, sampled only while the popup is open
+5. **Battery** — %, status, watts, health vs design, cycles, time remaining / time to full; multiple packs are combined, peripheral batteries (mice, keyboards) ignored
+6. **Processes** — top 5 by *current* CPU (from `/proc/*/stat` deltas, like `top`; 100% = one core), sampled only while the popup is open
 7. **History** — sparklines for CPU, memory, network, battery, with `… ago` → `now` (fills up to ~4 minutes at the default interval)
 8. **Bar display** — toggles that persist to `shell.json`
 
@@ -143,11 +143,11 @@ All keys are optional.
 | `showDisk` | `false` | Root filesystem % |
 | `showNet` | `false` | ↓/↑ on the default route |
 | `showBattery` | `false` | Battery % (Omarchy already has a power widget) |
-| `showGpu` | `true` | GPU % when sysfs has `gpu_busy_percent` |
+| `showGpu` | `true` | GPU % (AMD sysfs busy, Intel i915/xe idle residency) |
 | `showVram` | `false` | GPU memory % (AMD sysfs or `nvidia-smi`) |
-| `compactBar` | `true` | Drop `CPU` / `MEM` prefixes |
+| `compactBar` | `true` | Tighter spacing (names stay visible) |
 | `checkConnectivity` | `false` | Periodic ping for packet-loss alerts (off = no extra network) |
-| `interval` | `2000` | Sample period in ms (500–10000) |
+| `interval` | `2000` | Sample period in ms (clamped to 500–10000) |
 | `alertBattery` | `20` | Urgent while discharging at or below this % |
 | `alertTemp` | `85` | Urgent when CPU package °C is at or above this |
 | `alertMem` | `95` | Urgent when used memory % is at or above this |
@@ -169,7 +169,7 @@ All keys are optional.
 | Any disk ≥ `alertDisk` | `DISK` urgent; notification names the mount |
 | Ping check on, and N failed probes | network segment urgent |
 
-Notifications fire **once** when an alert starts, not every sample. Clicking the toast opens the panel and dismisses System Pulse toasts so they cannot cover the widget.
+Alerts use hysteresis so a reading hovering at the threshold does not flicker: temperature must hold for 3 samples and clears 5 °C below; memory clears 3% below; disk 2% below; battery 2% above. Notifications fire **once** when an alert starts, and the same alert will not re-toast within 10 minutes. Clicking the toast opens the panel and dismisses System Pulse toasts so they cannot cover the widget.
 
 ---
 
@@ -181,9 +181,10 @@ Works without extra setup on typical Omarchy laptops and desktops.
 - **CPU frequency:** `/proc/cpuinfo` MHz, or `cpufreq/scaling_cur_freq` (ARM)
 - **Battery:** `ENERGY_*` or `CHARGE_*` sysfs (health, watts, time left). Power is converted from microwatts (or µV × µA) to watts.
 - **Network:** IPv4 default route first, IPv6 if that's all there is
-- **GPU:** shown only if `/sys/class/drm/card*/device/gpu_busy_percent` exists (common on AMD; often missing on Intel)
+- **GPU:** AMD `/sys/class/drm/card*/device/gpu_busy_percent`; Intel from i915 `gt/gt0/rc6_residency_ms` or xe `tile0/gt0/gtidle/idle_residency_ms` (skipped while the GPU is runtime-suspended, so the widget never wakes it)
 - **VRAM:** AMD `mem_info_vram_used` / `mem_info_vram_total`, else `nvidia-smi` if installed. Hidden on GPUs that expose neither.
-- **Disks:** unique block devices, tmpfs/overlay skipped; `/` preferred over `/home` when they are the same volume
+- **Disks:** unique block devices, tmpfs/overlay/ISO skipped; `/` preferred over `/home` when they are the same volume. I/O speed sums physical disks (so LUKS/LVM is not double counted, and hot-plugged USB drives are included). Removable media under `/run/media` is listed but never triggers the full-disk alert.
+- **Network:** the default route with the lowest metric (ethernet beats wifi); clears when you disconnect
 
 ---
 

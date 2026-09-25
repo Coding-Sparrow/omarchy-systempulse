@@ -17,7 +17,8 @@ const fn = new Function(
     "parseNetDev, parseV4DefaultIface, parseV6DefaultIface, netRates," +
     "parseBattery, batteryPowerW, normalizeWatts, parseVramBytes, parseVramSmi," +
     "parseMilliC, parseGpuBusy, parseTop, parseDf, hottestDisk, rootDisk," +
-    "parseDiscover, packetLoss" +
+    "parseDiscover, packetLoss, isPhysicalDisk, gpuBusyFromIdle, parseProcStats," +
+    "parseBatteries, isRemovableMount, hysteresis, clampInt" +
     "});"
 )
 fn(api)
@@ -139,10 +140,15 @@ eq(
     cpu: "/sys/class/hwmon/hwmon6/temp1_input",
     nvme: "",
     gpu: "",
+    gpuIdle: "",
+    gpuRuntime: "",
     bat: "/sys/class/power_supply/BAT0/uevent",
+    bats: ["/sys/class/power_supply/BAT0/uevent"],
     vramUsed: "",
     vramTotal: "",
-    vramSmi: false
+    vramSmi: false,
+    clkTck: 100,
+    pageSize: 4096
   }
 )
 eq(
@@ -152,12 +158,77 @@ eq(
     cpu: "",
     nvme: "",
     gpu: "",
+    gpuIdle: "",
+    gpuRuntime: "",
     bat: "",
+    bats: [],
     vramUsed: "/sys/class/drm/card0/device/mem_info_vram_used",
     vramTotal: "/sys/class/drm/card0/device/mem_info_vram_total",
-    vramSmi: true
+    vramSmi: true,
+    clkTck: 100,
+    pageSize: 4096
   }
 )
+
+// ---- disks: physical only, per-device deltas, hotplug-safe
+eq("physical nvme", api.isPhysicalDisk("nvme0n1"), true)
+eq("partition not physical", api.isPhysicalDisk("nvme0n1p2"), false)
+eq("dm not physical", api.isPhysicalDisk("dm-0"), false)
+eq("usb sda physical", api.isPhysicalDisk("sda"), true)
+const ds = (n, r, w) => "259 0 " + n + " 0 0 " + r + " 0 0 0 " + w + " 0 0 0 0\n"
+const d1 = api.parseDiskstats(ds("nvme0n1", 1000, 1000) + ds("dm-0", 1000, 1000), null, null, 0)
+const d2 = api.parseDiskstats(ds("nvme0n1", 3000, 1000) + ds("dm-0", 3000, 1000) + ds("sda", 9e9, 9e9), null, d1.prevDisk, 1000)
+eq("disk read counts nvme once (not dm)", d2.readSpeed, 2000 * 512)
+eq("new hotplug disk no spike", d2.writeSpeed, 0)
+const d3 = api.parseDiskstats(ds("nvme0n1", 3000, 1000) + ds("sda", 9e9 + 100, 9e9), null, d2.prevDisk, 2000)
+eq("hotplug disk counted next sample", d3.readSpeed, 100 * 512)
+
+// ---- routes: lowest metric, skip down routes
+const rt = "Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT\n" +
+  "wlan0 00000000 0101A8C0 0003 0 0 600 00000000 0 0 0\n" +
+  "eth0 00000000 0101A8C0 0003 0 0 100 00000000 0 0 0\n" +
+  "tun0 00000080 00000000 0001 0 0 0 00000080 0 0 0\n"
+eq("v4 lowest metric", api.parseV4DefaultIface(rt), "eth0")
+eq("v4 none", api.parseV4DefaultIface("Iface Destination\n"), "")
+
+// ---- Intel GPU busy from rc6
+const g1 = api.gpuBusyFromIdle("1000", null, 0)
+eq("gpu idle first", g1.percent, -1)
+near("gpu idle busy", api.gpuBusyFromIdle("1750", g1.prev, 1000).percent, 25, 0.01)
+eq("gpu idle counter reset", api.gpuBusyFromIdle("5", g1.prev, 1000).percent, -1)
+
+// ---- per-process CPU deltas
+const st = (pid, name, ut, st, rss) => pid + " (" + name + ") S 1 1 1 0 -1 0 0 0 0 0 " + ut + " " + st + " 0 0 20 0 1 0 100 1000 " + rss + " 0\n"
+const p1 = api.parseProcStats(st(1, "idle one", 1000, 0, 256) + st(2, "busy) x", 0, 0, 512), null, 0, 1000, 4096, 100, 5)
+eq("procs first sample empty", p1.top.length, 0)
+const p2 = api.parseProcStats(st(1, "idle one", 1000, 0, 256) + st(2, "busy) x", 150, 50, 512) + st(3, "new", 99, 0, 1), p1.ticks, 2, 1000, 4096, 100, 5)
+eq("procs sorted, paren in name", p2.top.map(p => p.name), ["busy) x", "idle one"])
+near("procs cpu %", p2.top[0].cpu, 100, 0.01)
+near("procs mem %", p2.top[0].mem, 204.8, 0.01)
+
+// ---- multiple batteries, time to full
+const bat = (name, st, now, full, pw) => "POWER_SUPPLY_NAME=" + name + "\nPOWER_SUPPLY_STATUS=" + st +
+  "\nPOWER_SUPPLY_CAPACITY=" + Math.round(100 * now / full) + "\nPOWER_SUPPLY_ENERGY_NOW=" + now +
+  "\nPOWER_SUPPLY_ENERGY_FULL=" + full + "\nPOWER_SUPPLY_ENERGY_FULL_DESIGN=" + full + "\nPOWER_SUPPLY_POWER_NOW=" + pw + "\n"
+const two = api.parseBatteries(bat("BAT0", "Discharging", 10e6, 20e6, 5e6) + bat("BAT1", "Unknown", 30e6, 60e6, 5e6))
+eq("two packs weighted percent", two.percent, 50)
+eq("two packs status", two.status, "Discharging")
+near("two packs time left", two.timeEmptySec, 40 / 10 * 3600, 1)
+const chg = api.parseBatteries(bat("BAT0", "Charging", 30e6, 60e6, 15e6))
+near("time to full", chg.timeFullSec, 2 * 3600, 1)
+
+// ---- disks: removable/iso don't trip alert
+const df2 = api.parseDf(
+  "/dev/mapper/root / btrfs 1000 100\n/dev/sda1 /run/media/me/STICK exfat 1000 990\n/dev/sr0 /run/media/me/ISO iso9660 500 500\n"
+)
+eq("iso skipped", df2.map(d => d.target), ["/", "/run/media/me/STICK"])
+near("removable ignored by alert", api.hottestDisk(df2), 10, 0.01)
+
+eq("hysteresis trips", api.hysteresis(false, 95, 95, 92), true)
+eq("hysteresis holds", api.hysteresis(true, 93, 95, 92), true)
+eq("hysteresis clears", api.hysteresis(false, 93, 95, 92), false)
+eq("clampInt string", api.clampInt("100", 500, 10000, 2000), 500)
+eq("clampInt junk", api.clampInt("abc", 500, 10000, 2000), 2000)
 
 if (failed) {
   console.log("\n" + failed + " failed")

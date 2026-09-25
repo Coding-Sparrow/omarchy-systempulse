@@ -31,7 +31,6 @@ BarWidget {
   // ---- Disk
   property real diskReadSpeed: 0
   property real diskWriteSpeed: 0
-  property var diskDevices: null
   property var prevDisk: null
   property var disks: []
   property real diskPercent: 0
@@ -46,7 +45,8 @@ BarWidget {
   property real netRxTotal: 0
   property real netTxTotal: 0
   property var prevNet: null
-  property bool haveV4Default: false
+  property string v4Iface: ""
+  property string v6Iface: ""
   property var netDevStats: ({})
 
   // ---- Battery
@@ -57,10 +57,16 @@ BarWidget {
   property real batteryHealthPercent: 0
   property int batteryCycles: 0
   property real batteryTimeEmptySec: 0
+  property real batteryTimeFullSec: 0
+  property int batteryPacks: 1
+  property var batteryPaths: []
 
   // ---- GPU (sysfs busy percent; hidden when undiscovered)
   property real gpuPercent: -1
   property string gpuBusyPath: ""
+  property string gpuIdlePath: ""
+  property string gpuRuntimePath: ""
+  property var prevGpuIdle: null
   property real vramPercent: 0
   property real vramUsedGb: 0
   property real vramTotalGb: 0
@@ -76,6 +82,10 @@ BarWidget {
 
   // ---- Top processes (sampled only while the panel is open)
   property var topProcs: []
+  property var prevProcTicks: null
+  property real prevProcTime: 0
+  property int clkTck: 100
+  property int pageSize: 4096
 
   // ---- Settings (CLI `omarchy bar set` stores booleans as strings)
   function flag(key, fallback) {
@@ -94,10 +104,10 @@ BarWidget {
   readonly property bool showVram: flag("showVram", false)
   readonly property bool compactBar: flag("compactBar", true)
   readonly property bool checkConnectivity: flag("checkConnectivity", false)
-  readonly property int sampleInterval: setting("interval", 2000)
+  readonly property int sampleInterval: Model.clampInt(setting("interval", 2000), 500, 10000, 2000)
   readonly property string detailCommand: setting("detailCommand", "omarchy-launch-floating-terminal-with-presentation btop")
   readonly property int alertBattery: setting("alertBattery", 20)
-  readonly property int pingInterval: setting("pingInterval", 10000)
+  readonly property int pingInterval: Model.clampInt(setting("pingInterval", 10000), 2000, 600000, 10000)
   readonly property string pingHost: setting("pingHost", "1.1.1.1")
   readonly property int pingCount: setting("pingCount", 3)
   readonly property int netAlertAfter: setting("netAlertFailures", 3)
@@ -149,7 +159,7 @@ BarWidget {
     var segs = []
     if (showCpu) segs.push({ id: "cpu", text: cpuSegText(), alert: cpuAlert })
     if (showMem) segs.push({ id: "mem", text: memSegText(), alert: memAlert })
-    if (showGpu && gpuPercent >= 0) segs.push({ id: "cpu", text: gpuSegText(), alert: false })
+    if (showGpu && gpuPercent >= 0) segs.push({ id: "gpu", text: gpuSegText(), alert: false })
     if (showVram && vramTotalGb > 0) segs.push({ id: "vram", text: vramSegText(), alert: false })
     if (showDisk && diskTotalBytes > 0) segs.push({ id: "disk", text: diskSegText(), alert: diskAlert })
     if (showNet && netIface !== "") segs.push({ id: "net", text: "\u2193" + Model.speedShort(netDown) + " \u2191" + Model.speedShort(netUp), alert: netAlert })
@@ -160,12 +170,33 @@ BarWidget {
   property int netFailures: 0
   property real packetLoss: 0
   readonly property bool netAlert: checkConnectivity && showNet && netIface !== "" && netFailures >= netAlertAfter
-  readonly property bool batteryAlert: showBattery && batteryPresent && batteryStatus === "Discharging" && batteryPercent > 0 && batteryPercent <= alertBattery
-  readonly property bool cpuAlert: cpuTempC >= alertTemp
-  readonly property bool memAlert: showMem && memPercent >= alertMem
-  readonly property bool diskAlert: diskHottest >= alertDisk
+  // Latched alert states (see updateAlertStates): hysteresis stops a reading
+  // hovering at the threshold from flickering the bar or spamming toasts.
+  property bool batLow: false
+  property bool cpuHot: false
+  property int cpuHotStreak: 0
+  property bool memHigh: false
+  property bool diskFull: false
+  readonly property bool batteryAlert: showBattery && batLow
+  readonly property bool cpuAlert: cpuHot
+  readonly property bool memAlert: showMem && memHigh
+  readonly property bool diskAlert: diskFull
   readonly property bool alertActive: batteryAlert || cpuAlert || memAlert || diskAlert || netAlert
   property var activeAlerts: ({})
+  property var lastNotified: ({})
+  property var pendingNotes: []
+  readonly property int notifyCooldownMs: 600000
+
+  function updateAlertStates() {
+    // Temperature: must stay hot for 3 samples (turbo spikes are normal),
+    // clears once 5°C below the threshold.
+    cpuHotStreak = cpuTempC >= alertTemp ? cpuHotStreak + 1 : 0
+    cpuHot = cpuHot ? cpuTempC >= alertTemp - 5 : cpuHotStreak >= 3
+    memHigh = Model.hysteresis(memHigh, memPercent, alertMem, alertMem - 3)
+    diskFull = Model.hysteresis(diskFull, diskHottest, alertDisk, alertDisk - 2)
+    var onBattery = batteryPresent && batteryStatus === "Discharging" && batteryPercent > 0
+    batLow = onBattery && (batLow ? batteryPercent <= alertBattery + 2 : batteryPercent <= alertBattery)
+  }
 
   property string cpuTempPath: ""
   property string nvmeTempPath: ""
@@ -178,7 +209,12 @@ BarWidget {
     if (gpuPercent >= 0) parts.push("GPU " + Math.round(gpuPercent) + "%")
     if (vramTotalGb > 0) parts.push("VRAM " + vramUsedGb.toFixed(1) + " / " + vramTotalGb.toFixed(1) + " GB")
     if (showNet && netIface !== "") parts.push("\u2193" + Model.speed(netDown) + " \u2191" + Model.speed(netUp))
-    if (batteryPresent) parts.push("BAT " + batteryPercent + "% " + batteryStatus)
+    if (batteryPresent) {
+      var b = "BAT " + batteryPercent + "% " + batteryStatus
+      if (batteryTimeEmptySec > 0) b += " (" + Model.fmtDuration(batteryTimeEmptySec) + " left)"
+      else if (batteryTimeFullSec > 0) b += " (" + Model.fmtDuration(batteryTimeFullSec) + " to full)"
+      parts.push(b)
+    }
     if (cpuTempC > 0) parts.push("CPU " + Math.round(cpuTempC) + "\u00B0C")
     return parts.join("  ·  ")
   }
@@ -205,17 +241,27 @@ BarWidget {
     }
 
     var next = {}
+    var now = Date.now()
     for (var i = 0; i < alerts.length; i++) {
       var key = alerts[i][0]
       next[key] = true
-      if (notifications && !activeAlerts[key])
-        sendNotification("System Pulse — " + alerts[i][1])
+      if (!notifications || activeAlerts[key]) continue
+      // Re-arming alert: don't re-toast the same thing within the cooldown.
+      if (lastNotified[key] && now - lastNotified[key] < notifyCooldownMs) continue
+      lastNotified[key] = now
+      sendNotification("System Pulse — " + alerts[i][1])
     }
     activeAlerts = next
   }
 
   function sendNotification(message) {
-    if (notifyProc.running) return
+    pendingNotes.push(message)
+    pumpNotifications()
+  }
+
+  function pumpNotifications() {
+    if (notifyProc.running || pendingNotes.length === 0) return
+    var message = pendingNotes.shift()
     notifyProc.command = [
       "omarchy-notification-send",
       "--app-name", "System Pulse",
@@ -246,10 +292,16 @@ BarWidget {
     netDevFile.reload()
     routeFile.reload()
     ipv6RouteFile.reload()
-    if (batteryPath !== "") batFile.reload()
+    if (batteryPaths.length > 1) { if (!batProc.running) batProc.running = true }
+    else if (batteryPath !== "") batFile.reload()
     if (cpuTempPath !== "") cpuTempFile.reload()
     if (nvmeTempPath !== "") nvmeTempFile.reload()
     if (gpuBusyPath !== "") gpuBusyFile.reload()
+    else if (gpuIdlePath !== "" && showGpu) {
+      // Check runtime PM first: reading rc6 on a suspended iGPU would wake it.
+      if (gpuRuntimePath !== "") gpuRuntimeFile.reload()
+      else gpuIdleFile.reload()
+    }
     if (vramUsedPath !== "") vramUsedFile.reload()
     if (vramTotalPath !== "") vramTotalFile.reload()
     if (vramSmi && !vramSmiProc.running) vramSmiProc.running = true
@@ -286,11 +338,7 @@ BarWidget {
   }
 
   function applyDiskstats(content) {
-    if (diskDevices === null) {
-      diskDevices = Model.discoverDiskDevices(content)
-      return
-    }
-    var r = Model.parseDiskstats(content, diskDevices, prevDisk, new Date().getTime())
+    var r = Model.parseDiskstats(content, null, prevDisk, new Date().getTime())
     diskReadSpeed = r.readSpeed
     diskWriteSpeed = r.writeSpeed
     prevDisk = r.prevDisk
@@ -308,16 +356,20 @@ BarWidget {
     Model.pushHistory(netHistory, netDown + netUp, historyMax)
   }
 
-  function setNetIface(name) {
-    if (!name || name === "lo") return
-    if (netIface !== name) {
-      netIface = name
-      prevNet = null
-    }
+  // IPv4 default route first, IPv6-only as fallback. Clears on disconnect so
+  // the bar never shows a stale interface.
+  function updateNetIface() {
+    var name = v4Iface !== "" ? v4Iface : v6Iface
+    if (name === "lo") name = ""
+    if (netIface === name) return
+    netIface = name
+    prevNet = null
+    netDown = 0
+    netUp = 0
   }
 
   function applyBattery(content) {
-    var r = Model.parseBattery(content)
+    var r = Model.parseBatteries(content)
     if (!r) return
     batteryPresent = true
     batteryPercent = r.percent
@@ -326,6 +378,8 @@ BarWidget {
     batteryHealthPercent = r.healthPercent
     batteryCycles = r.cycles
     batteryTimeEmptySec = r.timeEmptySec
+    batteryTimeFullSec = r.timeFullSec || 0
+    batteryPacks = r.packs || 1
     Model.pushHistory(batHistory, batteryPercent, historyMax)
   }
 
@@ -347,15 +401,50 @@ BarWidget {
   FileView { id: diskstatsFile; path: "/proc/diskstats"; watchChanges: false; printErrors: false; onLoaded: root.applyDiskstats(text()) }
   FileView { id: netDevFile; path: "/proc/net/dev"; watchChanges: false; printErrors: false; onLoaded: root.applyNetDev(text()) }
   FileView { id: routeFile; path: "/proc/net/route"; watchChanges: false; printErrors: false; onLoaded: {
-    var iface = Model.parseV4DefaultIface(text())
-    root.haveV4Default = iface !== ""
-    if (iface) root.setNetIface(iface)
+    root.v4Iface = Model.parseV4DefaultIface(text())
+    root.updateNetIface()
   } }
   FileView { id: ipv6RouteFile; path: "/proc/net/ipv6_route"; watchChanges: false; printErrors: false; onLoaded: {
-    if (root.haveV4Default) return
-    var iface = Model.parseV6DefaultIface(text())
-    if (iface) root.setNetIface(iface)
+    root.v6Iface = Model.parseV6DefaultIface(text())
+    root.updateNetIface()
   } }
+
+  FileView {
+    id: gpuRuntimeFile
+    path: root.gpuRuntimePath
+    watchChanges: false
+    printErrors: false
+    onLoaded: {
+      if (String(text()).trim() === "suspended") {
+        root.gpuPercent = 0
+        root.prevGpuIdle = null
+      } else gpuIdleFile.reload()
+    }
+    onLoadFailed: gpuIdleFile.reload()
+  }
+
+  FileView {
+    id: gpuIdleFile
+    path: root.gpuIdlePath
+    watchChanges: false
+    printErrors: false
+    onLoaded: {
+      var r = Model.gpuBusyFromIdle(text(), root.prevGpuIdle, Date.now())
+      root.prevGpuIdle = r.prev
+      if (r.percent >= 0) root.gpuPercent = r.percent
+      else if (root.gpuPercent < 0) root.gpuPercent = 0
+    }
+  }
+
+  Process {
+    id: batProc
+    command: ["cat"].concat(root.batteryPaths)
+    stdout: StdioCollector {
+      id: batOut
+      waitForEnd: true
+      onStreamFinished: root.applyBattery(batOut.text)
+    }
+  }
 
   FileView {
     id: batFile
@@ -425,6 +514,7 @@ BarWidget {
     triggeredOnStart: true
     onTriggered: {
       root.sample()
+      root.updateAlertStates()
       root.checkAlerts()
       root.historyVersion++
     }
@@ -458,7 +548,7 @@ BarWidget {
     onTriggered: dfProc.running = true
   }
 
-  Process { id: notifyProc }
+  Process { id: notifyProc; onExited: root.pumpNotifications() }
   Process { id: dismissProc }
 
   Process {
@@ -500,12 +590,28 @@ BarWidget {
 
   Process {
     id: topProc
-    command: ["ps", "-eo", "pid,pcpu,pmem,comm", "--sort=-pcpu"]
+    command: ["bash", "-c", Model.PROC_STAT_SCRIPT]
     stdout: StdioCollector {
       id: topOut
       waitForEnd: true
-      onStreamFinished: root.topProcs = Model.parseTop(topOut.text)
+      onStreamFinished: {
+        var now = Date.now()
+        var dt = root.prevProcTime > 0 ? (now - root.prevProcTime) / 1000 : 0
+        var first = root.prevProcTicks === null
+        var r = Model.parseProcStats(topOut.text, root.prevProcTicks, dt,
+          root.memTotalGb * 1048576, root.pageSize, root.clkTck, 5)
+        root.prevProcTicks = r.ticks
+        root.prevProcTime = now
+        if (!first) root.topProcs = r.top
+        else topPrimer.restart() // quick second sample so the list isn't empty for 3s
+      }
     }
+  }
+
+  Timer {
+    id: topPrimer
+    interval: 700
+    onTriggered: if (!topProc.running) topProc.running = true
   }
 
   Timer {
@@ -516,6 +622,7 @@ BarWidget {
     onTriggered: {
       if (!topProc.running) topProc.running = true
     }
+    onRunningChanged: if (!running) { root.prevProcTicks = null; root.prevProcTime = 0 }
   }
 
   Process {
@@ -529,6 +636,13 @@ BarWidget {
         if (d.cpu) root.cpuTempPath = d.cpu
         if (d.nvme) root.nvmeTempPath = d.nvme
         if (d.gpu) root.gpuBusyPath = d.gpu
+        else if (d.gpuIdle) {
+          root.gpuIdlePath = d.gpuIdle
+          root.gpuRuntimePath = d.gpuRuntime
+        }
+        root.clkTck = d.clkTck
+        root.pageSize = d.pageSize
+        if (d.bats.length > 1) root.batteryPaths = d.bats
         if (d.vramUsed) root.vramUsedPath = d.vramUsed
         if (d.vramTotal) root.vramTotalPath = d.vramTotal
         if (d.vramSmi) root.vramSmi = true

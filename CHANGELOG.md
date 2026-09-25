@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.0
+
+- **Processes show current CPU**, not the lifetime average `ps pcpu` reported. Sampled from `/proc/*/stat` deltas (100% = one core, like `top`).
+- **Intel GPU busy %** from i915 `rc6_residency_ms` / xe `idle_residency_ms`. Not read while the iGPU is runtime-suspended, so it never wakes the GPU.
+- Disk I/O sums physical disks instead of only `dm-*` on LUKS/LVM systems, so other drives are included. USB drives plugged in after login are picked up, with no spike on the first sample.
+- Network uses the lowest-metric default route and clears on disconnect instead of sticking to a stale interface.
+- Alerts: hysteresis, a 3-sample requirement for CPU temperature, a 10-minute re-notify cooldown, and a queue so simultaneous alerts all get a toast.
+- Disk-full alert ignores removable media and ISO/UDF/EROFS images. `df` runs under `timeout 5` so a stale NFS/SMB mount can't hang it.
+- Battery: peripheral batteries (`scope=Device`) are no longer used as the system battery. Multiple packs are combined. Shows time to full while charging.
+- GPU bar segment focuses the CPU/GPU block; long mount paths elide instead of overlapping the size.
+- `interval` / `pingInterval` are clamped to sane ranges.
+
 ## 1.4.0
 
 - Battery watts match the Omarchy power widget (sysfs µW → W). A 21.5 W charge no longer shows as `21513339.0 W`.
