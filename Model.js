@@ -5,6 +5,17 @@ function clampPct(v) {
   return Math.max(0, Math.min(100, Math.round(v)))
 }
 
+// Escape text that ends up somewhere markup may be interpreted (e.g.
+// notification bodies). Process names and mount paths are attacker-chosen.
+function escapeMarkup(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
 function speed(bps) {
   if (bps < 1024) return Math.round(bps) + " B/s"
   if (bps < 1048576) return (bps / 1024).toFixed(bps < 10240 ? 1 : 0) + " kB/s"

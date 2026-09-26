@@ -18,7 +18,7 @@ const fn = new Function(
     "parseBattery, batteryPowerW, normalizeWatts, parseVramBytes, parseVramSmi," +
     "parseMilliC, parseGpuBusy, parseTop, parseDf, hottestDisk, rootDisk," +
     "parseDiscover, packetLoss, isPhysicalDisk, gpuBusyFromIdle, parseProcStats," +
-    "parseBatteries, isRemovableMount, hysteresis, clampInt" +
+    "parseBatteries, isRemovableMount, hysteresis, clampInt, escapeMarkup" +
     "});"
 )
 fn(api)
@@ -228,6 +228,7 @@ eq("hysteresis trips", api.hysteresis(false, 95, 95, 92), true)
 eq("hysteresis holds", api.hysteresis(true, 93, 95, 92), true)
 eq("hysteresis clears", api.hysteresis(false, 93, 95, 92), false)
 eq("clampInt string", api.clampInt("100", 500, 10000, 2000), 500)
+eq("escapeMarkup", api.escapeMarkup('/mnt/<img src="http://x/y">&\''), "/mnt/&lt;img src=&quot;http://x/y&quot;&gt;&amp;&#39;")
 eq("clampInt junk", api.clampInt("abc", 500, 10000, 2000), 2000)
 
 if (failed) {

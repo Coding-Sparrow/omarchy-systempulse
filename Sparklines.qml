@@ -53,6 +53,7 @@ Item {
         height: Math.max(cpuTitle.implicitHeight, cpuVal.implicitHeight)
 
         Text {
+          textFormat: Text.PlainText
           id: cpuTitle
           anchors.left: parent.left
           text: "CPU"
@@ -62,6 +63,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           id: cpuVal
           anchors.right: parent.right
           text: root.hw ? root.hw.cpuPercent + "%" : "—"
@@ -114,6 +116,7 @@ Item {
         height: Math.max(memTitle.implicitHeight, memVal.implicitHeight)
 
         Text {
+          textFormat: Text.PlainText
           id: memTitle
           anchors.left: parent.left
           text: "Memory"
@@ -123,6 +126,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           id: memVal
           anchors.right: parent.right
           text: root.hw ? Math.round(root.hw.memPercent) + "%" : "—"
@@ -175,6 +179,7 @@ Item {
         height: Math.max(netTitle.implicitHeight, netVal.implicitHeight)
 
         Text {
+          textFormat: Text.PlainText
           id: netTitle
           anchors.left: parent.left
           text: "Network"
@@ -184,6 +189,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           id: netVal
           anchors.right: parent.right
           text: root.hw && root.hw.netIface !== "" ? ("\u2193" + root.hw.speed(root.hw.netDown) + "  \u2191" + root.hw.speed(root.hw.netUp)) : "—"
@@ -240,6 +246,7 @@ Item {
         height: Math.max(batTitle.implicitHeight, batVal.implicitHeight)
 
         Text {
+          textFormat: Text.PlainText
           id: batTitle
           anchors.left: parent.left
           text: "Battery"
@@ -249,6 +256,7 @@ Item {
         }
 
         Text {
+          textFormat: Text.PlainText
           id: batVal
           anchors.right: parent.right
           text: root.hw && root.hw.batteryPresent ? root.hw.batteryPercent + "%" : "—"
@@ -296,6 +304,7 @@ Item {
       height: agoLabel.implicitHeight
 
       Text {
+        textFormat: Text.PlainText
         id: agoLabel
         anchors.left: parent.left
         text: {
@@ -310,6 +319,7 @@ Item {
       }
 
       Text {
+        textFormat: Text.PlainText
         anchors.right: parent.right
         text: root.hw && root.hw.cpuHistory && root.hw.cpuHistory.length >= 2 ? "now" : ""
         color: root.dimCol

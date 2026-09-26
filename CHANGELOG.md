@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1
+
+- Security: every `Text` renders as `Text.PlainText`, so process names from `/proc/<pid>/stat` and mount paths containing markup can't make Qt load an external resource when the panel opens. The mount path in the disk-full notification body is markup-escaped too.
+
 ## 1.5.0
 
 - **Processes show current CPU**, not the lifetime average `ps pcpu` reported. Sampled from `/proc/*/stat` deltas (100% = one core, like `top`).

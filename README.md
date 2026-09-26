@@ -4,7 +4,7 @@ An [iStat Menus](https://bjango.com/mac/istatmenus/)-style system monitor for th
 
 Glanceable CPU and memory on the [Omarchy](https://omarchy.org/) bar, with a popup that names the process eating your machine. Samples `/proc` and `/sys` every 2 seconds. No extra daemons. Ping is off unless you turn it on.
 
-Plugin ID: `coding-sparrow.systempulse` · Version **1.5.0** · [MIT](LICENSE)
+Plugin ID: `coding-sparrow.systempulse` · Version **1.5.1** · [MIT](LICENSE)
 
 **On the bar** (default glance): CPU sparkline + CPU% + memory% — disk, network, and battery stay off so they do not fight stock Omarchy icons:
 

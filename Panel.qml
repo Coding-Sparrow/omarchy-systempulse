@@ -199,6 +199,7 @@ Panel {
           spacing: Style.space(8)
 
           Text {
+            textFormat: Text.PlainText
             text: root.headingText("cpu", "CPU")
             color: root.headingColor("cpu")
             font.family: root.fam
@@ -211,6 +212,7 @@ Panel {
             spacing: Style.space(14)
 
             Text {
+              textFormat: Text.PlainText
               anchors.baseline: parent.bottom
               text: (root.hw ? Math.round(root.hw.cpuPercent) : 0) + "%"
               color: root.fg
@@ -224,6 +226,7 @@ Panel {
               spacing: Style.space(2)
 
               Text {
+                textFormat: Text.PlainText
                 text: root.hw && root.hw.loadAvg !== "" ? "Load  " + root.hw.loadAvg : "Load  —"
                 color: root.fg
                 font.family: root.fam
@@ -231,6 +234,7 @@ Panel {
               }
 
               Text {
+                textFormat: Text.PlainText
                 text: {
                   if (!root.hw) return "—"
                   var bits = []
@@ -280,6 +284,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: root.hw && root.hw.uptimeSec > 0
             text: root.hw ? ("Uptime  " + (function() {
               var s = Math.floor(root.hw.uptimeSec)
@@ -316,6 +321,7 @@ Panel {
           spacing: Style.space(6)
 
           Text {
+            textFormat: Text.PlainText
             text: root.headingText("mem", "MEMORY")
             color: root.headingColor("mem")
             font.family: root.fam
@@ -329,6 +335,7 @@ Panel {
             height: memUsedLabel.implicitHeight
 
             Text {
+              textFormat: Text.PlainText
               id: memUsedLabel
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
@@ -339,6 +346,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               text: root.hw ? (root.fmtGb(root.hw.memUsedGb) + " / " + root.fmtGb(root.hw.memTotalGb) + " (" + Math.round(root.hw.memPercent) + "%)") : "—"
@@ -365,6 +373,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             text: root.hw ? ("Cached  " + root.fmtGb(root.hw.cachedGb) + "   ·   Swap  " + root.fmtGb(root.hw.swapUsedGb) + " / " + root.fmtGb(root.hw.swapTotalGb) + " (" + Math.round(root.hw.swapPercent) + "%)") : ""
             color: root.dim
             font.family: root.fam
@@ -374,6 +383,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: root.hw && root.hw.vramTotalGb > 0
             text: root.headingText("vram", "VRAM")
             color: root.headingColor("vram")
@@ -389,6 +399,7 @@ Panel {
             height: vramUsedLabel.implicitHeight
 
             Text {
+              textFormat: Text.PlainText
               id: vramUsedLabel
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
@@ -399,6 +410,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
               text: root.hw ? (root.fmtGb(root.hw.vramUsedGb) + " / " + root.fmtGb(root.hw.vramTotalGb) + " (" + Math.round(root.hw.vramPercent) + "%)") : "—"
@@ -426,6 +438,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             text: root.headingText("disk", "DISK")
             color: root.headingColor("disk")
             font.family: root.fam
@@ -447,6 +460,7 @@ Panel {
                 height: diskLabel.implicitHeight
 
                 Text {
+                  textFormat: Text.PlainText
                   id: diskLabel
                   anchors.left: parent.left
                   anchors.right: diskValue.left
@@ -461,6 +475,7 @@ Panel {
                 }
 
                 Text {
+                  textFormat: Text.PlainText
                   id: diskValue
                   anchors.right: parent.right
                   anchors.verticalCenter: parent.verticalCenter
@@ -490,6 +505,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             text: root.hw ? ("Read  " + root.hw.speed(root.hw.diskReadSpeed) + "   ·   Write  " + root.hw.speed(root.hw.diskWriteSpeed) +
               (root.hw.nvmeTempC > 0 ? "   ·   " + Math.round(root.hw.nvmeTempC) + "\u00B0C" : "")) : ""
             color: root.dim
@@ -514,6 +530,7 @@ Panel {
           height: procTitle.implicitHeight
 
           Text {
+            textFormat: Text.PlainText
             id: procTitle
             anchors.left: parent.left
             text: "PROCESSES"
@@ -525,6 +542,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.right: parent.right
             anchors.baseline: procTitle.baseline
             text: "click → btop"
@@ -551,6 +569,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               anchors.left: parent.left
               anchors.right: procStats.left
               anchors.rightMargin: Style.space(8)
@@ -563,6 +582,7 @@ Panel {
             }
 
             Text {
+              textFormat: Text.PlainText
               id: procStats
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
@@ -599,6 +619,7 @@ Panel {
           visible: root.hw && root.hw.netIface !== ""
 
           Text {
+            textFormat: Text.PlainText
             text: root.headingText("net", "NETWORK")
             color: root.headingColor("net")
             font.family: root.fam
@@ -608,6 +629,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             text: root.hw && root.hw.netIface !== "" ? (root.hw.netIface + "    \u2193" + root.hw.speed(root.hw.netDown) + "   \u2191" + root.hw.speed(root.hw.netUp)) : "Not connected"
             color: root.fg
             font.family: root.fam
@@ -615,6 +637,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             text: root.hw && root.hw.netIface !== "" ? ("Since boot   \u2193" + (root.hw.netRxTotal / 1073741824).toFixed(1) + " GB   \u2191" + (root.hw.netTxTotal / 1073741824).toFixed(1) + " GB" +
               (root.localIp !== "" ? "   ·   " + root.localIp : "")) : ""
             color: root.dim
@@ -632,6 +655,7 @@ Panel {
           visible: root.hw && root.hw.batteryPresent
 
           Text {
+            textFormat: Text.PlainText
             text: root.headingText("battery", "BATTERY")
             color: root.headingColor("battery")
             font.family: root.fam
@@ -641,6 +665,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             text: root.hw ? (root.hw.batteryPercent + "%  ·  " + root.hw.batteryStatus +
               (root.fmtPowerW(root.hw.batteryPowerW) !== "" ? "  ·  " + root.fmtPowerW(root.hw.batteryPowerW) : "")) : ""
             color: root.fg
@@ -649,6 +674,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             text: {
               if (!root.hw) return ""
               var parts = []
@@ -686,6 +712,7 @@ Panel {
           height: histTitle.implicitHeight
 
           Text {
+            textFormat: Text.PlainText
             id: histTitle
             anchors.left: parent.left
             text: "HISTORY"
@@ -697,6 +724,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             anchors.right: parent.right
             anchors.baseline: histTitle.baseline
             text: root.hw && root.hw.historySpan ? root.hw.historySpan : ""
@@ -729,6 +757,7 @@ Panel {
           height: settingsTitle.implicitHeight
 
           Text {
+            textFormat: Text.PlainText
             id: settingsTitle
             anchors.left: parent.left
             text: root.settingsOpen ? "BAR DISPLAY  \u25BE" : "BAR DISPLAY  \u25B8"
@@ -740,6 +769,7 @@ Panel {
           }
 
           Text {
+            textFormat: Text.PlainText
             visible: !root.settingsOpen
             anchors.right: parent.right
             anchors.baseline: settingsTitle.baseline
@@ -783,6 +813,7 @@ Panel {
               height: Style.space(24)
 
               Text {
+                textFormat: Text.PlainText
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 text: modelData.label

@@ -237,7 +237,7 @@ BarWidget {
       for (var d = 0; d < disks.length; d++) {
         if (disks[d].percent >= alertDisk) { name = disks[d].target; break }
       }
-      alerts.push(["disk", "Disk almost full: " + name + " " + Math.round(diskHottest) + "%"])
+      alerts.push(["disk", "Disk almost full: " + Model.escapeMarkup(name) + " " + Math.round(diskHottest) + "%"])
     }
 
     var next = {}
@@ -756,6 +756,7 @@ BarWidget {
         model: root.barSegments
 
         Text {
+          textFormat: Text.PlainText
           required property var modelData
           text: modelData.text
           color: modelData.alert ? root.urgentCol : button.foreground
